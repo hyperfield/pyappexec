@@ -1,0 +1,5 @@
+<gresources>
+  <gresource prefix="/net/quicknode/pyappexec/scripts">
+    <file alias="get_python_version.py">../scripts/get_python_version.py</file>
+  </gresource>
+</gresources>
