@@ -14,22 +14,13 @@ int main()
 
         PythonSetupStatus::Status pythonStatus = appBootstrapper.getPythonSetupStatus();
 
-        if (pythonStatus == PythonSetupStatus::Status::NOT_FOUND ||
-            pythonStatus == PythonSetupStatus::Status::UPDATE_REQUIRED)
-        {
-            if (!appBootstrapper.downloadRequirements()) {
+        if (pythonStatus != PythonSetupStatus::Status::SUCCESS) {
+            if (!appBootstrapper.tryInstallPythonFromCommonPackageManagers()) {
                 return 1;
             }
-
-            if (!appBootstrapper.installRequirements()) {
-                return 1;
-            }
-
-            std::cout << "Python installed successfully. Checking version again..." << std::endl;
-            std::cout << std::endl;
 
             if (appBootstrapper.getPythonSetupStatus() != PythonSetupStatus::Status::SUCCESS) {
-                std::cerr << "Python installation was not successful." << std::endl;
+                std::cerr << "Python installation/update did not succeed." << std::endl;
                 return 1;
             }
         }
@@ -39,6 +30,18 @@ int main()
         }
 
         if (!appBootstrapper.installRequirements()) {
+            return 1;
+        }
+
+        if (!appBootstrapper.setupVirtualEnv()) {
+            return 1;
+        }
+
+        if (!appBootstrapper.installPythonDependencies()) {
+            return 1;
+        }
+
+        if (!appBootstrapper.launchPythonApp()) {
             return 1;
         }
 

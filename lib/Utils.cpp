@@ -95,6 +95,12 @@ bool Utils::ensureDirExists(const std::string& directoryPath)
 }
 
 
+bool Utils::fileExists(const std::string& fullPath)
+{
+    return fs::exists(fullPath);
+}
+
+
 std::string Utils::getTempPath()
 {
 #ifdef _WIN32

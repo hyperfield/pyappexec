@@ -36,8 +36,10 @@
 *.app
 main
 
-# Program activity artifacts
+# Program build, test and activity artifacts
 distrib/
+build/
+test/
 
 # Debugging artifacts
 core*

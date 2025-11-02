@@ -1,5 +1,6 @@
 #include "INIReader.h"
 #include "SpecConfig.hpp"
+#include <filesystem>
 #include <string>
 
 
@@ -7,6 +8,12 @@ SpecConfig::SpecConfig(const std::string& filename) : reader(filename)
 {
     if (reader.ParseError() != 0) {
         throw std::runtime_error("Failed to load config file: " + filename);
+    }
+
+    try {
+        configDir = std::filesystem::absolute(filename).parent_path();
+    } catch (const std::exception&) {
+        configDir.clear();
     }
 }
 
@@ -20,4 +27,14 @@ std::string SpecConfig::get_value(const std::string& section, const std::string&
     }
 
     return value;
+}
+
+
+std::filesystem::path SpecConfig::getConfigDir() const
+{
+    if (!configDir.empty()) {
+        return configDir;
+    }
+
+    return std::filesystem::current_path();
 }

@@ -1,5 +1,12 @@
 #pragma once
 
+#ifdef __cplusplus
 extern "C" {
-    extern GResource resources_resource;
+#endif
+
+GResource *resources_get_resource(void);
+extern GResource resources_resource;
+
+#ifdef __cplusplus
 }
+#endif
