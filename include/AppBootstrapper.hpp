@@ -5,6 +5,7 @@
 #include "SpecConfig.hpp"
 #include <filesystem>
 #include <optional>
+#include <utility>
 #include <vector>
 
 
@@ -64,6 +65,8 @@ private:
     std::filesystem::path exec_app_path;
     std::filesystem::path requirements_file;
     std::filesystem::path virtual_env_path;
+    std::vector<std::string> exec_app_args;
+    std::vector<std::pair<std::string, std::string>> exec_app_env;
 
     std::vector<Requirement> requirements;
     
@@ -75,6 +78,8 @@ private:
     std::filesystem::path getRequirementsStateFile() const;
     std::string computeRequirementsSignature() const;
     void persistRequirementsSignature(const std::string& signature) const;
+    static std::vector<std::string> parseCommandArguments(const std::string& args);
+    static std::vector<std::pair<std::string, std::string>> parseEnvironmentAssignments(const std::string& envSpec);
 };
 
 #endif

@@ -49,6 +49,8 @@ void AppBootstrapper::parseConfig()
     python_download_url = specConfig.get_value(mainSection, "python_download_url", false);
     python_min_ver = specConfig.get_value(mainSection, "python_min_ver", true);
     std::string execPathValue = specConfig.get_value(mainSection, "exec_app_path", true);
+    std::string execArgsValue = specConfig.get_value(mainSection, "exec_app_args", false);
+    std::string execEnvValue = specConfig.get_value(mainSection, "exec_env", false);
     std::string requirementsValue = specConfig.get_value(mainSection, "requirements_file", false);
     std::string pythonAppDirValue = specConfig.get_value(mainSection, "python_app_dir", false);
     std::string virtualEnvValue = specConfig.get_value(mainSection, "virtual_env_dir", false);
@@ -75,6 +77,14 @@ void AppBootstrapper::parseConfig()
     } else {
         requirements_file.clear();
     }
+
+    exec_app_args = execArgsValue.empty()
+        ? std::vector<std::string>{}
+        : parseCommandArguments(execArgsValue);
+
+    exec_app_env = execEnvValue.empty()
+        ? std::vector<std::pair<std::string, std::string>>{}
+        : parseEnvironmentAssignments(execEnvValue);
 
     if (virtualEnvValue.empty()) {
         virtualEnvValue = ".venv";
@@ -313,10 +323,20 @@ bool AppBootstrapper::launchPythonApp()
 
     std::cout << "Launching Python application (" << scriptArgument << ")..." << std::endl;
     try {
+        std::vector<std::string> args;
+        args.emplace_back(scriptArgument);
+        args.insert(args.end(), exec_app_args.begin(), exec_app_args.end());
+
+        bp::environment env = boost::this_process::environment();
+        for (const auto& entry : exec_app_env) {
+            env[entry.first] = entry.second;
+        }
+
         bp::child process(
             bp::exe = pythonExecutable.string(),
-            bp::args = std::vector<std::string>{scriptArgument},
-            bp::start_dir = python_app_dir.string()
+            bp::args = args,
+            bp::start_dir = python_app_dir.string(),
+            bp::env = env
         );
         process.wait();
         if (process.exit_code() != 0) {
@@ -550,6 +570,109 @@ void AppBootstrapper::persistRequirementsSignature(const std::string& signature)
     if (out) {
         out << signature;
     }
+}
+
+
+std::vector<std::string> AppBootstrapper::parseCommandArguments(const std::string& args)
+{
+    std::vector<std::string> result;
+    std::string current;
+    bool inQuotes = false;
+    char quoteChar = '\0';
+    bool escaping = false;
+
+    for (char ch : args) {
+        if (escaping) {
+            current.push_back(ch);
+            escaping = false;
+            continue;
+        }
+
+        if (inQuotes) {
+            if (ch == '\\') {
+                escaping = true;
+                continue;
+            }
+
+            if (ch == quoteChar) {
+                inQuotes = false;
+                continue;
+            }
+
+            current.push_back(ch);
+            continue;
+        }
+
+        if (ch == '\\') {
+            escaping = true;
+            continue;
+        }
+
+        if (ch == '"' || ch == '\'') {
+            inQuotes = true;
+            quoteChar = ch;
+            continue;
+        }
+
+        if (std::isspace(static_cast<unsigned char>(ch))) {
+            if (!current.empty()) {
+                result.emplace_back(current);
+                current.clear();
+            }
+            continue;
+        }
+
+        current.push_back(ch);
+    }
+
+    if (escaping) {
+        current.push_back('\\');
+    }
+
+    if (!current.empty()) {
+        result.emplace_back(current);
+    }
+
+    return result;
+}
+
+
+std::vector<std::pair<std::string, std::string>> AppBootstrapper::parseEnvironmentAssignments(const std::string& envSpec)
+{
+    std::vector<std::pair<std::string, std::string>> assignments;
+    std::stringstream stream(envSpec);
+    std::string token;
+
+    while (std::getline(stream, token, ';')) {
+        std::string trimmed = trimCopy(token);
+        if (trimmed.empty()) {
+            continue;
+        }
+
+        auto equalsPos = trimmed.find('=');
+        if (equalsPos == std::string::npos) {
+            std::cerr << "Ignoring malformed environment assignment: " << trimmed << std::endl;
+            continue;
+        }
+
+        std::string key = trimCopy(trimmed.substr(0, equalsPos));
+        std::string value = trimCopy(trimmed.substr(equalsPos + 1));
+
+        if (key.empty()) {
+            std::cerr << "Ignoring environment assignment with empty key." << std::endl;
+            continue;
+        }
+
+        if (value.size() >= 2 &&
+            ((value.front() == '"' && value.back() == '"') ||
+             (value.front() == '\'' && value.back() == '\''))) {
+            value = value.substr(1, value.size() - 2);
+        }
+
+        assignments.emplace_back(key, value);
+    }
+
+    return assignments;
 }
 
 

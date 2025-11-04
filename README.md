@@ -34,6 +34,8 @@ Many desktop Python applications require users to install Python, set up virtual
 - Installs Python package dependencies from a configurable requirements file inside the virtual environment.
 - Downloads and, when possible, installs external tools such as FFmpeg, using integrity checks to avoid re-downloading unchanged files.
 - Launches the target Python entry point after the environment is ready, with stdout/stderr feedback in the terminal.
+- Allows per-platform INI sections so Windows, macOS, and Linux can point at platform-specific scripts, download URLs, and tooling.
+- Accepts optional command-line arguments and environment overrides from the INI so you can tailor the launched Python process without rebuilding.
 - Embeds helper Python scripts via GLib resources so the launcher has zero runtime script dependencies.
 
 ## How It Works
@@ -102,8 +104,12 @@ PyAppExec is driven entirely by `pyappexec.ini`. Each operating system gets its 
 | `python_min_ver` | yes | Minimum acceptable Python version (for example `3.10`). |
 | `python_app_dir` | no | Directory that contains your Python project. Defaults to the INI file's directory. |
 | `exec_app_path` | yes | Entry-point script relative to `python_app_dir`, usually your `main.py`. |
+| `exec_app_args` | no | Extra command-line arguments appended after the entry script. Quote values with spaces (`"--flag value"`). |
+| `exec_env` | no | Semicolon-separated list of `KEY=VALUE` pairs that override environment variables for the launched app. |
 | `requirements_file` | no | Relative path to the Python requirements file. If omitted, Python dependency installation is skipped. |
 | `virtual_env_dir` | no | Directory to create the virtual environment in (relative to `python_app_dir`). Defaults to `.venv`. |
+
+Example: `exec_env = APP_ENV=production;LOG_LEVEL="info"` injects two variables, while `exec_app_args = --profile default --no-telemetry` adds both flags after the entry script.
 
 ### Requirements section
 
@@ -130,12 +136,14 @@ The repository ships with a Linux configuration that targets the sample app in `
 
 ```ini
 [Linux:main]
-python_download_url = https://www.python.org/ftp/python/3.13.1/python-3.13.1.exe
+python_download_url = https://www.python.org/ftp/python/3.13.1/Python-3.13.1.tgz
 python_min_ver = 3.10
 python_app_dir = test
-exec_app_path = main.py
+exec_app_path = src/your_package/__main__.py
 requirements_file = requirements.txt
 virtual_env_dir = .pyappexec-venv
+; exec_app_args = --profile default
+; exec_env = APP_ENV=production
 
 [Linux:requirements]
 requirement_1 = FFmpeg
@@ -147,9 +155,29 @@ requirement_1_min_version = 4.4.2
 requirement_1_launch_file = ffmpeg
 requirement_1_capture_stderr = false
 requirement_1_install_command = sudo apt-get update && sudo apt-get install -y ffmpeg
+
+[Windows:main]
+python_download_url = https://www.python.org/ftp/python/3.13.1/python-3.13.1-amd64.exe
+python_min_ver = 3.10
+python_app_dir = test
+exec_app_path = src/your_package/__main__.py
+requirements_file = requirements.txt
+virtual_env_dir = .pyappexec-venv
+
+[Windows:requirements]
+requirement_1 = FFmpeg
+requirement_1_url = https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.7z
+requirement_1_file_name = ffmpeg-release-essentials.7z
+requirement_1_version_check_command = ffmpeg -version
+requirement_1_version_regex = ^ffmpeg version ([0-9.]+)
+requirement_1_min_version = 7.0
+requirement_1_capture_stderr = false
+requirement_1_cmd_params = /S /quiet
 ```
 
 On Windows, optional `cmd_params` can be supplied to run silent installers.
+
+A macOS profile follows the same pattern with `[MacOS:main]` and `[MacOS:requirements]` sections; the sample `pyappexec.ini` in the repository shows how to point those entries at the same application while using a platform-appropriate Python installer URL and Homebrew-based FFmpeg installation command.
 
 ## Bundling External Artifacts
 
