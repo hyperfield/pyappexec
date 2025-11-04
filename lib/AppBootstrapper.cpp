@@ -12,6 +12,7 @@
 #include <iterator>
 #include <sstream>
 #include <vector>
+#include <spdlog/spdlog.h>
 
 namespace fs = std::filesystem;
 namespace bp = boost::process;
@@ -35,7 +36,7 @@ AppBootstrapper::AppBootstrapper(const SpecConfig& specConfig) :
     parseConfig();
     std::string python_ver = python.getPythonVersion();
     if (python_ver.empty()) {
-        std::cout << "Python not found." << std::endl;
+        spdlog::warn("Python not found.");
     }
 }
 
@@ -155,17 +156,17 @@ PythonSetupStatus::Status AppBootstrapper::getPythonSetupStatus()
     switch (status.status) {
         case PythonSetupStatus::Status::NOT_FOUND:
             if (!status.message.empty()) {
-                std::cout << status.message << std::endl;
+                spdlog::warn(status.message);
             }
             break;
         case PythonSetupStatus::Status::UPDATE_REQUIRED:
             if (!status.message.empty()) {
-                std::cerr << status.message << std::endl;
+                spdlog::error(status.message);
             }
             break;
         case PythonSetupStatus::Status::SUCCESS:
             if (!status.message.empty()) {
-                std::cout << status.message << std::endl;
+                spdlog::info(status.message);
             }
             break;
     }
@@ -178,14 +179,14 @@ bool AppBootstrapper::setupVirtualEnv()
 {
     try {
         if (virtual_env_path.empty()) {
-            std::cerr << "Virtual environment path is not configured." << std::endl;
+            spdlog::error("Virtual environment path is not configured.");
             return false;
         }
 
         fs::path marker = virtual_env_path / "pyvenv.cfg";
         if (fs::exists(marker)) {
             if (!virtual_env_reported_) {
-                std::cout << "Virtual environment already available at " << virtual_env_path << std::endl;
+                spdlog::info("Virtual environment already available at {}", virtual_env_path.string());
                 virtual_env_reported_ = true;
             }
             return true;
@@ -195,14 +196,14 @@ bool AppBootstrapper::setupVirtualEnv()
 
         if (!virtual_env_path.parent_path().empty() &&
             !Utils::ensureDirExists(virtual_env_path.parent_path().string())) {
-            std::cerr << "Failed to create virtual environment directory: "
-                      << virtual_env_path.parent_path() << std::endl;
+            spdlog::error("Failed to create virtual environment directory: {}",
+                          virtual_env_path.parent_path().string());
             return false;
         }
 
         std::string pythonCmd = python.getResolvedPythonCommand();
-        std::cout << "Creating virtual environment with '" << pythonCmd
-                  << "' at " << virtual_env_path << std::endl;
+        spdlog::info("Creating virtual environment with '{}' at {}",
+                     pythonCmd, virtual_env_path.string());
 
         std::vector<std::string> args{"-m", "venv", virtual_env_path.string()};
         bp::child process(
@@ -212,14 +213,14 @@ bool AppBootstrapper::setupVirtualEnv()
         );
         process.wait();
         if (process.exit_code() != 0) {
-            std::cerr << "Virtual environment creation failed with exit code "
-                      << process.exit_code() << std::endl;
+            spdlog::error("Virtual environment creation failed with exit code {}",
+                          process.exit_code());
             return false;
         }
 
         return true;
     } catch (const std::exception& err) {
-        std::cerr << "Virtual environment setup failed: " << err.what() << std::endl;
+        spdlog::error("Virtual environment setup failed: {}", err.what());
         return false;
     }
 }
@@ -228,19 +229,19 @@ bool AppBootstrapper::setupVirtualEnv()
 bool AppBootstrapper::installPythonDependencies()
 {
     if (requirements_file.empty()) {
-        std::cout << "No Python requirements specified; skipping dependency installation." << std::endl;
+        spdlog::info("No Python requirements specified; skipping dependency installation.");
         return true;
     }
 
     if (!fs::exists(requirements_file)) {
-        std::cerr << "Requirements file not found: " << requirements_file << std::endl;
+        spdlog::error("Requirements file not found: {}", requirements_file.string());
         return false;
     }
 
     fs::path pythonExecutable = getVirtualEnvPythonExecutable();
     if (!fs::exists(pythonExecutable)) {
-        std::cerr << "Virtual environment Python executable not found at "
-                  << pythonExecutable << std::endl;
+        spdlog::error("Virtual environment Python executable not found at {}",
+                       pythonExecutable.string());
         return false;
     }
 
@@ -256,7 +257,7 @@ bool AppBootstrapper::installPythonDependencies()
     }
 
     if (!signature.empty() && signature == existingSignature) {
-        std::cout << "Python dependencies already installed; requirements file unchanged." << std::endl;
+        spdlog::info("Python dependencies already installed; requirements file unchanged.");
         return true;
     }
 
@@ -269,13 +270,12 @@ bool AppBootstrapper::installPythonDependencies()
             );
             process.wait();
             if (process.exit_code() != 0) {
-                std::cerr << "Failed to " << action << " (exit code "
-                          << process.exit_code() << ")." << std::endl;
+                spdlog::error("Failed to {} (exit code {}).", action, process.exit_code());
                 return false;
             }
             return true;
         } catch (const std::exception& err) {
-            std::cerr << "Failed to " << action << ": " << err.what() << std::endl;
+            spdlog::error("Failed to {}: {}", action, err.what());
             return false;
         }
     };
@@ -304,13 +304,13 @@ bool AppBootstrapper::launchPythonApp()
 {
     fs::path pythonExecutable = getVirtualEnvPythonExecutable();
     if (!fs::exists(pythonExecutable)) {
-        std::cerr << "Cannot launch application; virtual environment Python missing at "
-                  << pythonExecutable << std::endl;
+        spdlog::error("Cannot launch application; virtual environment Python missing at {}",
+                       pythonExecutable.string());
         return false;
     }
 
     if (exec_app_path.empty() || !fs::exists(exec_app_path)) {
-        std::cerr << "Application entry point not found: " << exec_app_path << std::endl;
+        spdlog::error("Application entry point not found: {}", exec_app_path.string());
         return false;
     }
 
@@ -321,7 +321,7 @@ bool AppBootstrapper::launchPythonApp()
         scriptArgument = exec_app_path.string();
     }
 
-    std::cout << "Launching Python application (" << scriptArgument << ")..." << std::endl;
+    spdlog::info("Launching Python application ({})...", scriptArgument);
     try {
         std::vector<std::string> args;
         args.emplace_back(scriptArgument);
@@ -340,12 +340,11 @@ bool AppBootstrapper::launchPythonApp()
         );
         process.wait();
         if (process.exit_code() != 0) {
-            std::cerr << "Python application exited with code "
-                      << process.exit_code() << std::endl;
+            spdlog::error("Python application exited with code {}", process.exit_code());
             return false;
         }
     } catch (const std::exception& err) {
-        std::cerr << "Failed to start Python application: " << err.what() << std::endl;
+        spdlog::error("Failed to start Python application: {}", err.what());
         return false;
     }
 
@@ -372,10 +371,10 @@ bool AppBootstrapper::installRequirements()
         }
 
         if (!req.install_command.empty()) {
-            std::cout << "Installing " << req.name << " using command: " << req.install_command << std::endl;
+            spdlog::info("Installing {} using command: {}", req.name, req.install_command);
             int result = std::system(req.install_command.c_str());
             if (result != 0) {
-                std::cerr << "Failed to install " << req.name << " (exit code " << result << ")." << std::endl;
+                spdlog::error("Failed to install {} (exit code {}).", req.name, result);
                 success = false;
                 break;
             }
@@ -383,7 +382,7 @@ bool AppBootstrapper::installRequirements()
         }
 
         if (req.url.empty()) {
-            std::cout << "No installer URL configured for " << req.name << ". Skipping." << std::endl;
+            spdlog::info("No installer URL configured for {}. Skipping.", req.name);
             continue;
         }
 
@@ -391,14 +390,14 @@ bool AppBootstrapper::installRequirements()
         fs::path installerPath = distribDir / fileName;
 
         if (!fs::exists(installerPath)) {
-            std::cout << "Installer for " << req.name << " is not available at "
-                      << installerPath << ". Skipping." << std::endl;
+            spdlog::warn("Installer for {} is not available at {}. Skipping.",
+                         req.name, installerPath.string());
             continue;
         }
 
         if (!Utils::isWindows()) {
-            std::cout << req.name << " package downloaded to " << installerPath
-                      << ". Manual installation is required on this platform." << std::endl;
+            spdlog::info("{} package downloaded to {}. Manual installation required on this platform.",
+                         req.name, installerPath.string());
             continue;
         }
 
@@ -407,15 +406,13 @@ bool AppBootstrapper::installRequirements()
             command += " " + req.cmd_params;
         }
 
-        std::cout << "Running command: " << command << std::endl;
+        spdlog::info("Running command: {}", command);
         int result = std::system(command.c_str());
         if (result != 0) {
-            std::cerr << "Failed to install: " << req.name << std::endl;
+            spdlog::error("Failed to install: {}", req.name);
             success = false;
             break;
         }
-        
-        std::cout << std::endl;
     }
     return success;
 }
@@ -424,12 +421,12 @@ bool AppBootstrapper::installRequirements()
 bool AppBootstrapper::downloadRequirements()
 {
     if (requirements.empty()) {
-        std::cout << "No external requirements configured." << std::endl;
+        spdlog::info("No external requirements configured.");
         return true;
     }
 
     if (!Utils::ensureDirExists("distrib/")) {
-        std::cerr << "Failed to create 'distrib/' directory." << std::endl;
+        spdlog::error("Failed to create 'distrib/' directory.");
         return false;
     }
 
@@ -445,12 +442,12 @@ bool AppBootstrapper::downloadRequirements()
         }
 
         if (!req.install_command.empty()) {
-            std::cout << req.name << " will be installed via command; no download required." << std::endl;
+            spdlog::info("{} will be installed via command; no download required.", req.name);
             continue;
         }
 
         if (req.url.empty()) {
-            std::cout << "No download URL configured for " << req.name << ". Skipping." << std::endl;
+            spdlog::info("No download URL configured for {}. Skipping.", req.name);
             continue;
         }
 
@@ -458,17 +455,15 @@ bool AppBootstrapper::downloadRequirements()
         fs::path req_path = fs::path("distrib") / fileName;
     
         if (!Utils::isFileComplete(req_path.string(), req.url)) {
-            std::cout << "Downloading: " << req.name << " from " << req.url << std::endl;
+            spdlog::info("Downloading: {} from {}", req.name, req.url);
             if (!Utils::downloadFile(req.url, req_path.string())) {
-                std::cout << std::endl;
-                std::cerr << "Failed to download: " << req.name << " from " << req.url << std::endl;
+                spdlog::error("Failed to download: {} from {}", req.name, req.url);
                 allDownloadsSuccessful = false;
                 break;
             }
         } else {
-            std::cout << req_path << " is already downloaded" << std::endl;
+            spdlog::info("{} is already downloaded", req_path.string());
         }
-        std::cout << std::endl;
     }    
 
     return allDownloadsSuccessful;
@@ -651,7 +646,7 @@ std::vector<std::pair<std::string, std::string>> AppBootstrapper::parseEnvironme
 
         auto equalsPos = trimmed.find('=');
         if (equalsPos == std::string::npos) {
-            std::cerr << "Ignoring malformed environment assignment: " << trimmed << std::endl;
+            spdlog::warn("Ignoring malformed environment assignment: {}", trimmed);
             continue;
         }
 
@@ -659,7 +654,7 @@ std::vector<std::pair<std::string, std::string>> AppBootstrapper::parseEnvironme
         std::string value = trimCopy(trimmed.substr(equalsPos + 1));
 
         if (key.empty()) {
-            std::cerr << "Ignoring environment assignment with empty key." << std::endl;
+            spdlog::warn("Ignoring environment assignment with empty key.");
             continue;
         }
 
@@ -695,7 +690,7 @@ bool AppBootstrapper::isRequirementAlreadyInstalled(Requirement& req)
 
         if (req.min_version.empty()) {
             if (!req.status_reported) {
-                std::cout << req.name << " detected (version " << version << ")." << std::endl;
+                spdlog::info("{} detected (version {}).", req.name, version);
             }
             req.last_version_check_result = true;
             req.status_reported = true;
@@ -706,11 +701,9 @@ bool AppBootstrapper::isRequirementAlreadyInstalled(Requirement& req)
         bool shouldLog = !req.status_reported || !req.last_version_check_result.has_value() || req.last_version_check_result.value() != meets;
         if (shouldLog) {
             if (meets) {
-                std::cout << req.name << " " << version
-                          << " meets minimum version " << req.min_version << std::endl;
+                spdlog::info("{} {} meets minimum version {}", req.name, version, req.min_version);
             } else {
-                std::cout << req.name << " " << version
-                          << " is below required version " << req.min_version << std::endl;
+                spdlog::warn("{} {} is below required version {}", req.name, version, req.min_version);
             }
         }
         req.last_version_check_result = meets;
@@ -718,8 +711,7 @@ bool AppBootstrapper::isRequirementAlreadyInstalled(Requirement& req)
 
         return meets;
     } catch (const std::exception& err) {
-        std::cerr << "Requirement check for " << req.name
-                  << " failed: " << err.what() << std::endl;
+        spdlog::error("Requirement check for {} failed: {}", req.name, err.what());
         return false;
     }
 }
@@ -786,36 +778,34 @@ bool AppBootstrapper::tryInstallPythonFromCommonPackageManagers()
             offeredVersion = trimCopy(offeredVersion);
 
             if (offeredVersion.empty()) {
-                std::cout << "Unable to determine Python version offered by " << manager.name << "." << std::endl;
+                spdlog::info("Unable to determine Python version offered by {}.", manager.name);
                 continue;
             }
 
             if (!python.isPythonVersionAtLeast(offeredVersion, python_min_ver)) {
-                std::cerr << manager.name << " offers Python " << offeredVersion
-                          << ", which is below required version " << python_min_ver << std::endl;
+                spdlog::warn("{} offers Python {}, which is below required version {}",
+                              manager.name, offeredVersion, python_min_ver);
                 continue;
             }
 
-            std::cout << "Attempting to install/upgrade Python via " << manager.name << "..." << std::endl;
+            spdlog::info("Attempting to install/upgrade Python via {}...", manager.name);
             int installResult = std::system(manager.installCommand.c_str());
             if (installResult == 0) {
-                std::cout << "Python installation via " << manager.name << " completed." << std::endl;
+                spdlog::info("Python installation via {} completed.", manager.name);
                 return true;
             } else {
-                std::cerr << manager.name << " installation command failed with exit code "
-                          << installResult << std::endl;
+                spdlog::error("{} installation command failed with exit code {}", manager.name, installResult);
                 return false;
             }
         } catch (const std::exception& err) {
-            std::cerr << "Failed to query " << manager.name << " for Python versions: "
-                      << err.what() << std::endl;
+            spdlog::error("Failed to query {} for Python versions: {}", manager.name, err.what());
         }
     }
 
-    std::cerr << "No supported package manager could provide the required Python version." << std::endl;
+    spdlog::error("No supported package manager could provide the required Python version.");
     return false;
 #else
-    std::cerr << "Automatic Python installation is not supported on this platform." << std::endl;
+    spdlog::warn("Automatic Python installation is not supported on this platform.");
     return false;
 #endif
 }

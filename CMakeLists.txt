@@ -8,6 +8,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_AUTOMOC ON)
 
 find_package(Qt6 COMPONENTS Widgets REQUIRED)
+find_package(spdlog CONFIG REQUIRED)
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GIO REQUIRED IMPORTED_TARGET gio-2.0)
@@ -36,6 +37,7 @@ set(SOURCES
     lib/PythonManager.cpp
     lib/SpecConfig.cpp
     lib/Utils.cpp
+    lib/Logger.cpp
     gui/MainWindow.cpp
     gui/GuiRunner.cpp
     include/gui/MainWindow.hpp
@@ -54,4 +56,5 @@ target_link_libraries(pyappexec
         PkgConfig::GIO
         INIReader
         Qt6::Widgets
+        spdlog::spdlog
 )

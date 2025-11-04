@@ -8,6 +8,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <vector>
+#include <spdlog/spdlog.h>
 
 
 std::string PythonManager::getPythonVersion()
@@ -69,18 +70,18 @@ bool PythonManager::isPythonVersionAtLeast(const std::string& installed, const s
 bool PythonManager::isPythonInstalledAndMeetsVersion(const std::string& requiredVersion) {
     std::string installedVersion = getPythonVersion();
     if (installedVersion.empty()) {
-        std::cerr << "Python is NOT installed!" << std::endl;
+        spdlog::warn("Python is NOT installed!");
         return false;
     }
 
     installedVersion.erase(installedVersion.find_last_not_of(" \n\r\t") + 1);
     if (isPythonVersionAtLeast(installedVersion, requiredVersion)) {
-        std::cout << "Python " << installedVersion
-                  << " is installed and meets the minimum requirement (" 
-                  << requiredVersion << ")." << std::endl;
+        spdlog::info("Python {} is installed and meets the minimum requirement ({})",
+                     installedVersion, requiredVersion);
         return true;
     } else {
-        std::cerr << "Python version is too old! Installed: " << installedVersion << ", required: >= " << requiredVersion << std::endl;
+        spdlog::error("Python version is too old! Installed: {}, required: >= {}",
+                      installedVersion, requiredVersion);
         return false;
     }
 }
@@ -118,7 +119,7 @@ std::string PythonManager::resolvePythonCommand()
 
             return cachedPythonCommand;
         } catch (const std::runtime_error& err) {
-            std::cerr << "[Python detection] " << candidate << " failed: " << err.what() << std::endl;
+            spdlog::debug("Python detection candidate '{}' failed: {}", candidate, err.what());
         }
     }
 

@@ -10,6 +10,7 @@
 #include <string>
 #include <iostream>
 #include <vector>
+#include <spdlog/spdlog.h>
 
 #ifdef _WIN32
     #include <windows.h>
@@ -126,16 +127,16 @@ bool Utils::downloadFile(const std::string& url, const std::string& fullOutputPa
 {
     #ifdef _WIN32
         if (fs::exists(fullOutputPath)) {
-            std::cout << "File already exists: " << fullOutputPath << std::endl;
+            spdlog::info("File already exists: {}", fullOutputPath);
             return true;
         }
 
         HRESULT result = URLDownloadToFileA(NULL, url.c_str(), fullOutputPath.c_str(), 0, NULL);
         if (result == S_OK) {
-            std::cout << "Download succeeded: " << fullOutputPath << std::endl;
+            spdlog::info("Download succeeded: {}", fullOutputPath);
             return true;
         } else {
-            std::cerr << "Download failed with HRESULT: " << result << std::endl;
+            spdlog::error("Download failed with HRESULT: {}", result);
             return false;
         }
 
@@ -163,13 +164,13 @@ size_t Utils::getRemoteFileSize(const std::string& url) {
     #ifdef _WIN32
         HINTERNET hInternet = InternetOpenA("FileSizeChecker", INTERNET_OPEN_TYPE_DIRECT, NULL, NULL, 0);
         if (!hInternet) {
-            std::cerr << "InternetOpenA failed!" << std::endl;
+            spdlog::error("InternetOpenA failed while checking {}", url);
             return 0;
         }
 
         HINTERNET hUrl = InternetOpenUrlA(hInternet, url.c_str(), NULL, 0, INTERNET_FLAG_NO_CACHE_WRITE | INTERNET_FLAG_RELOAD, 0);
         if (!hUrl) {
-            std::cerr << "InternetOpenUrlA failed for: " << url << std::endl;
+            spdlog::error("InternetOpenUrlA failed for {}", url);
             InternetCloseHandle(hInternet);
             return 0;
         }
@@ -178,7 +179,7 @@ size_t Utils::getRemoteFileSize(const std::string& url) {
         DWORD fileSizeSize = sizeof(fileSize);
 
         if (!HttpQueryInfoA(hUrl, HTTP_QUERY_CONTENT_LENGTH | HTTP_QUERY_FLAG_NUMBER, &fileSize, &fileSizeSize, NULL)) {
-            std::cerr << "HttpQueryInfoA failed for: " << url << std::endl;
+            spdlog::error("HttpQueryInfoA failed for {}", url);
             fileSize = 0;
         }
 

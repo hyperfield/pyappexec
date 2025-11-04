@@ -40,6 +40,7 @@ main
 readthedocs/
 
 # Program build, test and activity artifacts
+.codacy
 distrib/
 build/
 test/
@@ -49,3 +50,7 @@ test2/
 core*
 
 # End of https://www.toptal.com/developers/gitignore/api/c++
+
+
+#Ignore vscode AI rules
+.github/instructions/codacy.instructions.md

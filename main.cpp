@@ -1,8 +1,9 @@
 #include "AppBootstrapper.hpp"
 #include "SpecConfig.hpp"
 #include "gui/GuiRunner.hpp"
+#include "Logger.hpp"
 #include <gio/gio.h>
-#include <iostream>
+#include <spdlog/spdlog.h>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -21,7 +22,7 @@ int runCli(SpecConfig& specConfig)
         }
 
         if (appBootstrapper.getPythonSetupStatus() != PythonSetupStatus::Status::SUCCESS) {
-            std::cerr << "Python installation/update did not succeed." << std::endl;
+            spdlog::error("Python installation/update did not succeed.");
             return 1;
         }
     }
@@ -78,6 +79,8 @@ int main(int argc, char** argv)
         forwardedArgs.emplace_back(argv[i]);
     }
 
+    Logger::initialize();
+
     try {
         SpecConfig specConfig("pyappexec.ini");
 
@@ -88,7 +91,7 @@ int main(int argc, char** argv)
         return runCli(specConfig);
 
     } catch (const std::runtime_error& e) {
-        std::cerr << "Error: " << e.what() << std::endl;
+        spdlog::error("Error: {}", e.what());
         return 1;
     }
 }

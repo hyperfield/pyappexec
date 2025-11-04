@@ -25,6 +25,8 @@ def main() -> int:
         "gui/MainWindow.cpp",
         "gui/GuiRunner.cpp",
         "Qt6::Widgets",
+        "find_package(spdlog",
+        "spdlog::spdlog",
     ]
 
     for snippet in expected_snippets:

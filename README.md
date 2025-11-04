@@ -37,6 +37,7 @@ Many desktop Python applications require users to install Python, set up virtual
 - Allows per-platform INI sections so Windows, macOS, and Linux can point at platform-specific scripts, download URLs, and tooling.
 - Accepts optional command-line arguments and environment overrides from the INI so you can tailor the launched Python process without rebuilding.
 - Ships with an optional Qt6 front-end that surfaces progress, embedded terminal output, and error dialogs; fall back to CLI mode with a single flag.
+- Emits structured logs via spdlog so you can tail progress or integrate with external log collectors.
 - Embeds helper Python scripts via GLib resources so the launcher has zero runtime script dependencies.
 
 ## How It Works
@@ -71,6 +72,7 @@ To build the launcher you need:
 - CMake 3.16 or newer.
 - `pkg-config` and the development headers for `gio-2.0` (part of GLib) — these provide `glib-compile-resources` and the GIO runtime used to embed scripts.
 - Qt 6 (Widgets module) headers and libraries for the optional GUI front-end.
+- [spdlog](https://github.com/gabime/spdlog) (header-only logging library) for structured logging output.
 - Boost (Boost.Process header is required; the default compiled Boost libraries are optional on most platforms).
 - The [inih](https://github.com/benhoyt/inih) library with the `INIReader` interface available to CMake as `INIReader` (install system-wide or add it as a submodule and expose the target).
 - `curl` (Linux/macOS) or the Windows URLMon APIs (already part of Win32) for downloading requirement archives.
