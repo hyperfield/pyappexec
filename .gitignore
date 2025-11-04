@@ -36,6 +36,9 @@
 *.app
 main
 
+# External documentation
+readthedocs/
+
 # Program build, test and activity artifacts
 distrib/
 build/

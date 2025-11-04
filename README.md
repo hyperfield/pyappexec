@@ -36,6 +36,7 @@ Many desktop Python applications require users to install Python, set up virtual
 - Launches the target Python entry point after the environment is ready, with stdout/stderr feedback in the terminal.
 - Allows per-platform INI sections so Windows, macOS, and Linux can point at platform-specific scripts, download URLs, and tooling.
 - Accepts optional command-line arguments and environment overrides from the INI so you can tailor the launched Python process without rebuilding.
+- Ships with an optional Qt6 front-end that surfaces progress, embedded terminal output, and error dialogs; fall back to CLI mode with a single flag.
 - Embeds helper Python scripts via GLib resources so the launcher has zero runtime script dependencies.
 
 ## How It Works
@@ -69,6 +70,7 @@ To build the launcher you need:
 - A C++20 toolchain (GCC 11+, Clang 13+, or MSVC 19.30+).
 - CMake 3.16 or newer.
 - `pkg-config` and the development headers for `gio-2.0` (part of GLib) — these provide `glib-compile-resources` and the GIO runtime used to embed scripts.
+- Qt 6 (Widgets module) headers and libraries for the optional GUI front-end.
 - Boost (Boost.Process header is required; the default compiled Boost libraries are optional on most platforms).
 - The [inih](https://github.com/benhoyt/inih) library with the `INIReader` interface available to CMake as `INIReader` (install system-wide or add it as a submodule and expose the target).
 - `curl` (Linux/macOS) or the Windows URLMon APIs (already part of Win32) for downloading requirement archives.
@@ -92,6 +94,10 @@ After building, run the launcher from the project root so it can find `pyappexec
 
 The launcher uses the INI file next to the executable (or the current working directory) to decide what to do. You can ship multiple INI files if you want different app profiles; point PyAppExec at the desired one by copying or symlinking it alongside the binary.
 
+### GUI mode
+
+Set `GUI = true` under the relevant `[<OS>:main]` section to launch the Qt6 front-end. The GUI embeds the CLI output (PowerShell on Windows, Terminal on macOS/Linux), shows a progress indicator, and surfaces blocking error dialogs if anything fails. Pass `--no-gui` on the command line or set `GUI = false` to force the traditional CLI experience even when the INI enables the GUI.
+
 ## Configuration
 
 PyAppExec is driven entirely by `pyappexec.ini`. Each operating system gets its own pair of sections: `[Linux:main]` and `[Linux:requirements]`, `[Windows:main]` and `[Windows:requirements]`, and so on.
@@ -108,6 +114,7 @@ PyAppExec is driven entirely by `pyappexec.ini`. Each operating system gets its 
 | `exec_env` | no | Semicolon-separated list of `KEY=VALUE` pairs that override environment variables for the launched app. |
 | `requirements_file` | no | Relative path to the Python requirements file. If omitted, Python dependency installation is skipped. |
 | `virtual_env_dir` | no | Directory to create the virtual environment in (relative to `python_app_dir`). Defaults to `.venv`. |
+| `GUI` | no | `true` to launch the Qt front-end; `false` to stay purely CLI. Users can also pass `--no-gui` at runtime to force CLI regardless of config. |
 
 Example: `exec_env = APP_ENV=production;LOG_LEVEL="info"` injects two variables, while `exec_app_args = --profile default --no-telemetry` adds both flags after the entry script.
 
@@ -142,6 +149,7 @@ python_app_dir = test
 exec_app_path = src/your_package/__main__.py
 requirements_file = requirements.txt
 virtual_env_dir = .pyappexec-venv
+GUI = true
 ; exec_app_args = --profile default
 ; exec_env = APP_ENV=production
 
@@ -163,6 +171,7 @@ python_app_dir = test
 exec_app_path = src/your_package/__main__.py
 requirements_file = requirements.txt
 virtual_env_dir = .pyappexec-venv
+GUI = true
 
 [Windows:requirements]
 requirement_1 = FFmpeg
@@ -179,6 +188,16 @@ On Windows, optional `cmd_params` can be supplied to run silent installers.
 
 A macOS profile follows the same pattern with `[MacOS:main]` and `[MacOS:requirements]` sections; the sample `pyappexec.ini` in the repository shows how to point those entries at the same application while using a platform-appropriate Python installer URL and Homebrew-based FFmpeg installation command.
 
+### Working with `pyproject.toml`, Poetry, Pipenv, uv, etc.
+
+PyAppExec installs dependencies by running `pip install -r <requirements_file>` inside the managed virtual environment. Projects that rely on `pyproject.toml`-only builds or external tooling can still be launched with a few extra steps:
+
+- **Export a lock file**: most tools can emit a plain requirements file that PyAppExec can consume (`poetry export --without-hashes --format requirements.txt > requirements.txt`, `pipenv lock -r > requirements.txt`, `uv pip compile pyproject.toml -o requirements.txt`). Point `requirements_file` at the exported artifact and refresh it whenever dependencies change.
+- **Delegate to your tool**: instead of (or in addition to) `requirements_file`, set `exec_app_args` or wrap your entry point so the launcher runs `poetry run …`, `pipenv run …`, `uv run …`, etc. You can vendor the tool inside your project and install it via `requirements.txt` if needed.
+- **Custom bootstrap scripts**: complex setups (building optional wheels, applying migrations, downloading models) can be orchestrated by pointing `exec_app_path` at a bespoke `bootstrap.py` that shells out to Poetry/Pipenv/uv as required before launching your real app.
+
+Regardless of approach, remember that PyAppExec always executes inside its own virtual environment. If your tool manages environments internally (for example `pipenv --venv`), either disable the virtual env in `pyappexec.ini` (point `virtual_env_dir` to a location you control and skip creating it) or ensure the tool is happy with the interpreter PyAppExec provisions.
+
 ## Bundling External Artifacts
 
 Place offline installers, archives, or wheel files in the `distrib/` directory. PyAppExec stores downloads here and skips re-downloading when the file already exists with the expected size (checked via HTTP `Content-Length`). You can pre-populate this directory before shipping your package to avoid runtime downloads.
@@ -192,6 +211,19 @@ The `test/` directory contains the open-source YT Channel Downloader project as 
 3. Run `./build/pyappexec` from the repository root. The launcher will set up a virtual environment under `test/.pyappexec-venv`, install Python dependencies from `test/requirements.txt`, and start the PyQt application defined in `test/main.py`.
 
 You can swap out the `test/` directory with your own Python app by updating `pyappexec.ini`.
+
+## Read the Docs site
+
+All content from this README plus additional deep dives is mirrored under `readthedocs/` so it can be published on [Read the Docs](https://readthedocs.com/). To preview the site locally:
+
+```bash
+python -m venv .docs-venv
+source .docs-venv/bin/activate
+pip install sphinx sphinx-rtd-theme
+(cd readthedocs && sphinx-build -b html . _build/html)
+```
+
+Open `_build/html/index.html` in your browser to inspect the generated documentation.
 
 ## Development Notes
 

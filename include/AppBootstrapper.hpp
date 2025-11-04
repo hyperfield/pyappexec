@@ -49,6 +49,8 @@ public:
     bool downloadRequirements();
     bool launchPythonApp();
     bool tryInstallPythonFromCommonPackageManagers();
+    static std::string getOSPrefix();
+    static bool parseBool(const std::string& value, bool fallback);
 
     std::string getPythonDownloadUrl();
     std::vector<Requirement> getRequirements();
@@ -71,10 +73,8 @@ private:
     std::vector<Requirement> requirements;
     
     void parseConfig();
-    std::string getOSPrefix();
     std::filesystem::path resolvePath(const std::string& value, const std::filesystem::path& baseDir) const;
     std::filesystem::path getVirtualEnvPythonExecutable() const;
-    static bool parseBool(const std::string& value, bool fallback);
     std::filesystem::path getRequirementsStateFile() const;
     std::string computeRequirementsSignature() const;
     void persistRequirementsSignature(const std::string& signature) const;

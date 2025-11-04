@@ -1,54 +1,94 @@
 #include "AppBootstrapper.hpp"
-#include "PythonManager.hpp"
 #include "SpecConfig.hpp"
-#include "Utils.hpp"
-#include <algorithm>
+#include "gui/GuiRunner.hpp"
 #include <gio/gio.h>
+#include <iostream>
+#include <string>
+#include <string_view>
+#include <vector>
 
+namespace {
 
-int main()
+int runCli(SpecConfig& specConfig)
 {
+    AppBootstrapper appBootstrapper(specConfig);
+
+    PythonSetupStatus::Status pythonStatus = appBootstrapper.getPythonSetupStatus();
+
+    if (pythonStatus != PythonSetupStatus::Status::SUCCESS) {
+        if (!appBootstrapper.tryInstallPythonFromCommonPackageManagers()) {
+            return 1;
+        }
+
+        if (appBootstrapper.getPythonSetupStatus() != PythonSetupStatus::Status::SUCCESS) {
+            std::cerr << "Python installation/update did not succeed." << std::endl;
+            return 1;
+        }
+    }
+
+    if (!appBootstrapper.downloadRequirements()) {
+        return 1;
+    }
+
+    if (!appBootstrapper.installRequirements()) {
+        return 1;
+    }
+
+    if (!appBootstrapper.setupVirtualEnv()) {
+        return 1;
+    }
+
+    if (!appBootstrapper.installPythonDependencies()) {
+        return 1;
+    }
+
+    if (!appBootstrapper.launchPythonApp()) {
+        return 1;
+    }
+
+    return 0;
+}
+
+bool shouldLaunchGui(const SpecConfig& specConfig, bool forceCli)
+{
+    if (forceCli) {
+        return false;
+    }
+
+    std::string mainSection = AppBootstrapper::getOSPrefix() + ":main";
+    std::string guiValue = specConfig.get_value(mainSection, "GUI", false);
+    return AppBootstrapper::parseBool(guiValue, false);
+}
+
+}
+
+
+int main(int argc, char** argv)
+{
+    bool forceCli = false;
+    std::vector<std::string> forwardedArgs;
+    forwardedArgs.reserve(argc > 1 ? argc - 1 : 0);
+
+    for (int i = 1; i < argc; ++i) {
+        std::string_view arg(argv[i]);
+        if (arg == "--no-gui") {
+            forceCli = true;
+            continue;
+        }
+        forwardedArgs.emplace_back(argv[i]);
+    }
+
     try {
         SpecConfig specConfig("pyappexec.ini");
-        AppBootstrapper appBootstrapper(specConfig);
 
-        PythonSetupStatus::Status pythonStatus = appBootstrapper.getPythonSetupStatus();
-
-        if (pythonStatus != PythonSetupStatus::Status::SUCCESS) {
-            if (!appBootstrapper.tryInstallPythonFromCommonPackageManagers()) {
-                return 1;
-            }
-
-            if (appBootstrapper.getPythonSetupStatus() != PythonSetupStatus::Status::SUCCESS) {
-                std::cerr << "Python installation/update did not succeed." << std::endl;
-                return 1;
-            }
+        if (shouldLaunchGui(specConfig, forceCli)) {
+            return runGuiApplication(argc, argv, forwardedArgs);
         }
 
-        if (!appBootstrapper.downloadRequirements()) {
-            return 1;
-        }
-
-        if (!appBootstrapper.installRequirements()) {
-            return 1;
-        }
-
-        if (!appBootstrapper.setupVirtualEnv()) {
-            return 1;
-        }
-
-        if (!appBootstrapper.installPythonDependencies()) {
-            return 1;
-        }
-
-        if (!appBootstrapper.launchPythonApp()) {
-            return 1;
-        }
+        return runCli(specConfig);
 
     } catch (const std::runtime_error& e) {
         std::cerr << "Error: " << e.what() << std::endl;
         return 1;
     }
-
-    return 0;
 }

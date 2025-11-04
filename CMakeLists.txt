@@ -5,6 +5,9 @@ project(pyappexec LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_AUTOMOC ON)
+
+find_package(Qt6 COMPONENTS Widgets REQUIRED)
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GIO REQUIRED IMPORTED_TARGET gio-2.0)
@@ -33,6 +36,9 @@ set(SOURCES
     lib/PythonManager.cpp
     lib/SpecConfig.cpp
     lib/Utils.cpp
+    gui/MainWindow.cpp
+    gui/GuiRunner.cpp
+    include/gui/MainWindow.hpp
     ${GENERATED_RESOURCE_C}
 )
 
@@ -47,4 +53,5 @@ target_link_libraries(pyappexec
     PRIVATE
         PkgConfig::GIO
         INIReader
+        Qt6::Widgets
 )
