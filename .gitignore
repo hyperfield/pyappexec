@@ -39,7 +39,7 @@ main
 # Program build, test and activity artifacts
 distrib/
 build/
-test/
+test*/
 
 # Debugging artifacts
 core*
