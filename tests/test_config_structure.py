@@ -75,6 +75,17 @@ def validate() -> int:
                 errors += 1
                 fail(f"[{main_section}] GUI must be true/false, found '{gui_value}'")
 
+        log_console_value = section.get("log_console", "")
+        if log_console_value and log_console_value.strip().lower() not in {"true", "false"}:
+            errors += 1
+            fail(f"[{main_section}] log_console must be true/false")
+
+        log_level_value = section.get("log_level", "")
+        valid_levels = {"trace", "debug", "info", "warn", "warning", "error", "critical", "fatal", "off", "none"}
+        if log_level_value and log_level_value.strip().lower() not in valid_levels:
+            errors += 1
+            fail(f"[{main_section}] log_level has invalid value '{log_level_value}'")
+
         if req_section not in parser:
             errors += 1
             fail(f"Missing section [{req_section}]")

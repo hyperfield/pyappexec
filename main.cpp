@@ -84,6 +84,13 @@ int main(int argc, char** argv)
     try {
         SpecConfig specConfig("pyappexec.ini");
 
+        std::string mainSection = AppBootstrapper::getOSPrefix() + ":main";
+        bool logConsole = AppBootstrapper::parseBool(
+            specConfig.get_value(mainSection, "log_console", false), true);
+        auto level = Logger::levelFromString(
+            specConfig.get_value(mainSection, "log_level", false));
+        Logger::configure(logConsole, level);
+
         if (shouldLaunchGui(specConfig, forceCli)) {
             return runGuiApplication(argc, argv, forwardedArgs);
         }

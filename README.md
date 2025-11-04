@@ -117,6 +117,8 @@ PyAppExec is driven entirely by `pyappexec.ini`. Each operating system gets its 
 | `requirements_file` | no | Relative path to the Python requirements file. If omitted, Python dependency installation is skipped. |
 | `virtual_env_dir` | no | Directory to create the virtual environment in (relative to `python_app_dir`). Defaults to `.venv`. |
 | `GUI` | no | `true` to launch the Qt front-end; `false` to stay purely CLI. Users can also pass `--no-gui` at runtime to force CLI regardless of config. |
+| `log_console` | no | `true` (default) to emit logs to stdout/stderr, `false` to silence console output (the GUI still captures logs internally). |
+| `log_level` | no | Minimum severity for console logs. Supports `trace`, `debug`, `info`, `warn`, `error`, `critical`, `off`. |
 
 Example: `exec_env = APP_ENV=production;LOG_LEVEL="info"` injects two variables, while `exec_app_args = --profile default --no-telemetry` adds both flags after the entry script.
 
@@ -152,6 +154,8 @@ exec_app_path = src/your_package/__main__.py
 requirements_file = requirements.txt
 virtual_env_dir = .pyappexec-venv
 GUI = true
+log_console = true
+log_level = info
 ; exec_app_args = --profile default
 ; exec_env = APP_ENV=production
 
@@ -174,6 +178,8 @@ exec_app_path = src/your_package/__main__.py
 requirements_file = requirements.txt
 virtual_env_dir = .pyappexec-venv
 GUI = true
+log_console = true
+log_level = info
 
 [Windows:requirements]
 requirement_1 = FFmpeg
