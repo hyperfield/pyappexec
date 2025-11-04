@@ -231,6 +231,16 @@ Open `_build/html/index.html` in your browser to inspect the generated documenta
 - A build generates `.pyappexec_requirements_state` under the virtual environment directory to cache the requirements signature. Delete it if you need to force a reinstall.
 - Boost.Process powers all child process execution. Ensure the runtime has permission to spawn subprocesses and access network resources.
 
+## Testing
+
+Lightweight smoke tests validate the INI layout, Read the Docs structure, and GUI build configuration. Run them with:
+
+```bash
+python tests/run_all.py
+```
+
+The test scripts live under `tests/` and can be extended as the project grows.
+
 ## Troubleshooting
 
 - **Python not detected**: Confirm that a compatible interpreter is available on the `PATH`. On Linux, check the console logs to see if PyAppExec attempted package-manager installation.

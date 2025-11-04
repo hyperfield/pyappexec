@@ -42,7 +42,8 @@ readthedocs/
 # Program build, test and activity artifacts
 distrib/
 build/
-test*/
+test/
+test2/
 
 # Debugging artifacts
 core*
