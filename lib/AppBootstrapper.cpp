@@ -2,8 +2,18 @@
 #include "SpecConfig.hpp"
 #include "Utils.hpp"
 #include <algorithm>
-#define BOOST_PROCESS_VERSION 1
-#include <boost/process/v1.hpp>
+#if defined(__has_include)
+#  if __has_include(<boost/process/v1.hpp>)
+#    define PYAPPEXEC_USE_BOOST_PROCESS_V1 1
+#  endif
+#endif
+
+#ifdef PYAPPEXEC_USE_BOOST_PROCESS_V1
+#  define BOOST_PROCESS_VERSION 1
+#  include <boost/process/v1.hpp>
+#else
+#  include <boost/process.hpp>
+#endif
 #include <cstdlib>
 #include <system_error>
 #include <cctype>
@@ -16,7 +26,12 @@
 #include <spdlog/spdlog.h>
 
 namespace fs = std::filesystem;
+#ifdef PYAPPEXEC_USE_BOOST_PROCESS_V1
 namespace bp = boost::process::v1;
+#else
+namespace bp = boost::process;
+#endif
+#undef PYAPPEXEC_USE_BOOST_PROCESS_V1
 
 namespace {
 std::string trimCopy(const std::string& input) {

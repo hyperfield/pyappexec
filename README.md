@@ -86,6 +86,27 @@ To build the launcher you need:
 
 ### Build
 
+On Linux, install the toolchain and development headers via your package manager before running CMake. Example commands:
+
+- **Debian-based (Ubuntu, Mint, Pop!\_OS):**
+
+  ```bash
+  sudo apt update
+  sudo apt install build-essential cmake pkg-config libglib2.0-dev qt6-base-dev libspdlog-dev libboost-all-dev libcurl4-openssl-dev
+  ```
+
+- **Fedora-based (Fedora, RHEL, CentOS Stream):**
+
+  ```bash
+  sudo dnf install @development-tools cmake pkgconf-pkg-config glib2-devel qt6-qtbase-devel spdlog-devel boost-devel libcurl-devel
+  ```
+
+- **Arch-based (Arch, Manjaro, EndeavourOS):**
+
+  ```bash
+  sudo pacman -S --needed base-devel cmake pkgconf glib2 qt6-base spdlog boost curl
+  ```
+
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build

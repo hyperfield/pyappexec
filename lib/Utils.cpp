@@ -1,7 +1,17 @@
 #include "Utils.hpp"
 #include <array>
-#define BOOST_PROCESS_VERSION 1
-#include <boost/process/v1.hpp>
+#if defined(__has_include)
+#  if __has_include(<boost/process/v1.hpp>)
+#    define PYAPPEXEC_USE_BOOST_PROCESS_V1 1
+#  endif
+#endif
+
+#ifdef PYAPPEXEC_USE_BOOST_PROCESS_V1
+#  define BOOST_PROCESS_VERSION 1
+#  include <boost/process/v1.hpp>
+#else
+#  include <boost/process.hpp>
+#endif
 // cppcheck-suppress missingIncludeSystem
 #include <filesystem>
 // cppcheck-suppress missingIncludeSystem
@@ -33,7 +43,12 @@
 #endif
 
 namespace fs = std::filesystem;
+#ifdef PYAPPEXEC_USE_BOOST_PROCESS_V1
 namespace bp = boost::process::v1;
+#else
+namespace bp = boost::process;
+#endif
+#undef PYAPPEXEC_USE_BOOST_PROCESS_V1
 
 
 std::string Utils::runPythonScriptFromResourceAndCaptureOutput(const std::string& script_name, const std::string& python_cmd)
