@@ -5,7 +5,7 @@
 #include <QApplication>
 #include <QStringList>
 
-int runGuiApplication(int argc, char** argv, const std::vector<std::string>& forwardedArgs)
+int runGuiApplication(int argc, char** argv, const std::vector<std::string>& forwardedArgs, const std::string& guiStatePath, const std::string& appDisplayName)
 {
     QApplication app(argc, argv);
 
@@ -14,7 +14,7 @@ int runGuiApplication(int argc, char** argv, const std::vector<std::string>& for
         args << QString::fromStdString(entry);
     }
 
-    MainWindow window(args);
+    MainWindow window(args, QString::fromStdString(guiStatePath), QString::fromStdString(appDisplayName));
     window.show();
 
     return app.exec();

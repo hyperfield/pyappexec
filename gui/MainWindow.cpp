@@ -1,10 +1,17 @@
 #include "gui/MainWindow.hpp"
 
+#include <QAction>
+#include <QCheckBox>
+#include <QCloseEvent>
 #include <QCoreApplication>
 // cppcheck-suppress missingIncludeSystem
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QFile>
 #include <QFontDatabase>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QMenuBar>
 // cppcheck-suppress missingIncludeSystem
 #include <QMessageBox>
 #include <QPlainTextEdit>
@@ -34,12 +41,27 @@ QString terminalTitle()
 }
 
 
-MainWindow::MainWindow(const QStringList& cliArguments, QWidget* parent) :
+MainWindow::MainWindow(const QStringList& cliArguments, const QString& stateFilePath, const QString& appDisplayName, QWidget* parent) :
     QMainWindow(parent),
-    cliArguments_(cliArguments)
+    cliArguments_(cliArguments),
+    stateFilePath_(stateFilePath),
+    appDisplayName_(appDisplayName.isEmpty() ? tr("PyAppExec") : appDisplayName)
 {
-    setWindowTitle(tr("PyAppExec"));
-    resize(900, 600);
+    setWindowTitle(QStringLiteral("%1 (via PyAppExec)").arg(appDisplayName_));
+    resize(600, 600);
+
+    QMenu* helpMenu = nullptr;
+#if defined(Q_OS_MAC)
+    helpMenu = menuBar()->addMenu(tr("Help"));
+#else
+    helpMenu = menuBar()->addMenu(tr("&Help"));
+#endif
+    auto* aboutAction = helpMenu->addAction(tr("About PyAppExec"));
+    aboutAction->setMenuRole(QAction::NoRole);
+    connect(aboutAction, &QAction::triggered, this, &MainWindow::showAboutPyAppExec);
+    auto* aboutQtAction = helpMenu->addAction(tr("About Qt"));
+    aboutQtAction->setMenuRole(QAction::NoRole);
+    connect(aboutQtAction, &QAction::triggered, this, &MainWindow::showAboutQt);
 
     auto* central = new QWidget(this);
     auto* layout = new QVBoxLayout(central);
@@ -65,6 +87,11 @@ MainWindow::MainWindow(const QStringList& cliArguments, QWidget* parent) :
 
     auto* buttons = new QHBoxLayout();
     buttons->addStretch();
+    suppressCheckBox_ = new QCheckBox(tr("Hide GUI after successful runs"), central);
+    suppressCheckBox_->setEnabled(false);
+    suppressCheckBox_->setToolTip(tr("If checked, the GUI stays hidden on future successful runs (it reappears automatically if a run fails)."));
+    buttons->addWidget(suppressCheckBox_);
+
     closeButton_ = new QPushButton(tr("Close"), central);
     closeButton_->setEnabled(false);
     buttons->addWidget(closeButton_);
@@ -120,10 +147,14 @@ void MainWindow::handleProcessFinished(int exitCode, QProcess::ExitStatus status
 
     if (completedSuccessfully_) {
         statusLabel_->setText(tr("Status: completed successfully"));
-        QMessageBox::information(this, tr("PyAppExec"), tr("Python application finished successfully."));
+        QMessageBox::information(this, appDisplayName_, tr("%1 finished successfully.").arg(appDisplayName_));
+        suppressCheckBox_->setEnabled(true);
     } else {
         statusLabel_->setText(tr("Status: failed (exit code %1)").arg(exitCode));
-        QMessageBox::critical(this, tr("PyAppExec"), tr("The launcher encountered an error. Review the log output above."));
+        QMessageBox::critical(this, appDisplayName_, tr("The launcher encountered an error. Review the log output above."));
+        suppressCheckBox_->setChecked(false);
+        suppressCheckBox_->setEnabled(false);
+        persistGuiPreference(false);
     }
 }
 
@@ -134,7 +165,10 @@ void MainWindow::handleProcessError(QProcess::ProcessError)
     progressBar_->setValue(0);
     closeButton_->setEnabled(true);
     statusLabel_->setText(tr("Status: failed to start launching process"));
-    QMessageBox::critical(this, tr("PyAppExec"), tr("Unable to start the launcher process."));
+    QMessageBox::critical(this, appDisplayName_, tr("Unable to start the launcher process."));
+    suppressCheckBox_->setChecked(false);
+    suppressCheckBox_->setEnabled(false);
+    persistGuiPreference(false);
 }
 
 
@@ -152,4 +186,70 @@ void MainWindow::appendOutput(const QString& text, bool isError)
     terminalView_->moveCursor(QTextCursor::End);
     terminalView_->insertPlainText(payload);
     terminalView_->verticalScrollBar()->setValue(terminalView_->verticalScrollBar()->maximum());
+}
+
+
+void MainWindow::persistGuiPreference(bool suppress)
+{
+    if (stateFilePath_.isEmpty()) {
+        return;
+    }
+
+    QFile file(stateFilePath_);
+    if (suppress) {
+        if (file.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
+            file.write("suppress_gui=1\n");
+            file.close();
+        }
+    } else {
+        if (file.exists()) {
+            file.remove();
+        }
+    }
+}
+
+
+void MainWindow::closeEvent(QCloseEvent* event)
+{
+    if (completedSuccessfully_) {
+        persistGuiPreference(suppressCheckBox_->isChecked());
+    }
+    QMainWindow::closeEvent(event);
+}
+
+
+void MainWindow::showAboutPyAppExec()
+{
+    QDialog dialog(this);
+    dialog.setWindowTitle(tr("About PyAppExec"));
+    dialog.resize(420, 320);
+
+    auto* layout = new QVBoxLayout(&dialog);
+
+    auto* textLabel = new QLabel(QStringLiteral(
+        "<b>%1</b> is bootstrapped by PyAppExec.<br><br>"
+        "PyAppExec prepares Python interpreters, virtual environments, and external tools so end users can run your "
+        "packaged application without manual setup.<br><br>"
+        "<b>Version:</b> 0.1.0<br>"
+        "<b>Author:</b> hyperfield<br>"
+        "<b>License:</b> MIT<br>"
+        "<b>Github:</b> <a href=\"https://github.com/hyperfield/pyappexec\">https://github.com/hyperfield/pyappexec</a><br>"
+        "<b>Years:</b> 2025")
+        .arg(appDisplayName_));
+    textLabel->setWordWrap(true);
+    textLabel->setTextFormat(Qt::RichText);
+    textLabel->setOpenExternalLinks(true);
+    layout->addWidget(textLabel);
+
+    auto* buttonBox = new QDialogButtonBox(QDialogButtonBox::Close, &dialog);
+    connect(buttonBox, &QDialogButtonBox::rejected, &dialog, &QDialog::accept);
+    layout->addWidget(buttonBox);
+
+    dialog.exec();
+}
+
+
+void MainWindow::showAboutQt()
+{
+    QMessageBox::aboutQt(this);
 }
