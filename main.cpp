@@ -1,4 +1,5 @@
 #include "AppBootstrapper.hpp"
+#include "AppMetadata.hpp"
 #include "Logger.hpp"
 #include "SpecConfig.hpp"
 #include "gui/GuiRunner.hpp"
@@ -260,6 +261,11 @@ int main(int argc, char** argv)
         int result = runCli(specConfig);
         if (result != 0) {
             writeGuiPreference(guiPreferenceFile, false);
+        } else {
+            spdlog::info("Bootstrapped by PyAppExec {} ({}). Project: {}",
+                         AppMetadata::kVersion,
+                         AppMetadata::kYears,
+                         AppMetadata::kGithub);
         }
         return result;
 

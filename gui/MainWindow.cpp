@@ -1,6 +1,7 @@
 #include "gui/MainWindow.hpp"
 
 #include <QAction>
+#include "AppMetadata.hpp"
 #include <QCheckBox>
 #include <QCloseEvent>
 #include <QCoreApplication>
@@ -148,6 +149,12 @@ void MainWindow::handleProcessFinished(int exitCode, QProcess::ExitStatus status
     if (completedSuccessfully_) {
         statusLabel_->setText(tr("Status: completed successfully"));
         appendOutput(tr("[info] %1 finished successfully.\n").arg(appDisplayName_), false);
+        appendOutput(tr("[info] Bootstrapped by %1 %2 (%3). Project: %4\n")
+                         .arg(QString::fromUtf8(AppMetadata::kAppName.data()),
+                              QString::fromUtf8(AppMetadata::kVersion.data()),
+                              QString::fromUtf8(AppMetadata::kYears.data()),
+                              QString::fromUtf8(AppMetadata::kGithub.data())),
+                     false);
         suppressCheckBox_->setEnabled(true);
     } else {
         statusLabel_->setText(tr("Status: failed (exit code %1)").arg(exitCode));
@@ -227,15 +234,21 @@ void MainWindow::showAboutPyAppExec()
     auto* layout = new QVBoxLayout(&dialog);
 
     auto* textLabel = new QLabel(QStringLiteral(
-        "<b>%1</b> is bootstrapped by PyAppExec.<br><br>"
+        "<b>%1</b> is bootstrapped by %2.<br><br>"
         "PyAppExec prepares Python interpreters, virtual environments, and external tools so end users can run your "
         "packaged application without manual setup.<br><br>"
-        "<b>Version:</b> 0.1.0<br>"
-        "<b>Author:</b> hyperfield<br>"
-        "<b>License:</b> MIT<br>"
-        "<b>Github:</b> <a href=\"https://github.com/hyperfield/pyappexec\">https://github.com/hyperfield/pyappexec</a><br>"
-        "<b>Years:</b> 2025")
-        .arg(appDisplayName_));
+        "<b>Version:</b> %3<br>"
+        "<b>Author:</b> %4<br>"
+        "<b>License:</b> %5<br>"
+        "<b>Github:</b> <a href=\"%6\">%6</a><br>"
+        "<b>Years:</b> %7")
+        .arg(appDisplayName_,
+             QString::fromUtf8(AppMetadata::kAppName.data()),
+             QString::fromUtf8(AppMetadata::kVersion.data()),
+             QString::fromUtf8(AppMetadata::kAuthor.data()),
+             QString::fromUtf8(AppMetadata::kLicense.data()),
+             QString::fromUtf8(AppMetadata::kGithub.data()),
+             QString::fromUtf8(AppMetadata::kYears.data())));
     textLabel->setWordWrap(true);
     textLabel->setTextFormat(Qt::RichText);
     textLabel->setOpenExternalLinks(true);
