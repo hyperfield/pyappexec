@@ -1,0 +1,12 @@
+engines:
+  cppcheck:
+    patterns:
+      - pattern: "**/*.cpp"
+        commands:
+          - --project=build/compile_commands.json
+          - --enable=warning,style,performance,portability
+          - --inline-suppr
+    exclude_paths:
+      - build/**
+      - test/**
+      - test2/**
