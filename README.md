@@ -61,7 +61,7 @@ Many Python applications require users to install Python, set up virtual environ
 ├── gui/                    # Qt6 widgets for the optional front-end (MainWindow, GuiRunner)
 ├── resources/              # GLib resource manifest plus embedded Python helper scripts
 ├── scripts/                # Source copies of the embedded helper scripts
-├── pyappexec.ini           # Example configuration that targets the sample app
+├── pyappexec.ini           # Example configuration that targets the sample app (to be placed in a runnable Python app's directory)
 ├── LICENSE / README.md     # Project metadata and documentation
 ```
 
@@ -73,11 +73,10 @@ To build the launcher you need:
 
 - A C++20 toolchain (GCC 11+, Clang 13+, or MSVC 19.30+).
 - CMake 3.16 or newer.
-- `pkg-config` and the development headers for `gio-2.0` (part of GLib) — these provide `glib-compile-resources` and the GIO runtime used to embed scripts.
+- `pkg-config` and the development headers for `gio-2.0` (part of GLib) — these provide `glib-compile-resources` and the GIO runtime used to embed scripts. On macOS install them with `brew install glib libffi zlib`.
 - Qt 6 (Widgets module) headers and libraries for the optional GUI front-end.
 - [spdlog](https://github.com/gabime/spdlog) (header-only logging library) for structured logging output.
 - Boost (Boost.Process header is required; the default compiled Boost libraries are optional on most platforms).
-- The [inih](https://github.com/benhoyt/inih) library with the `INIReader` interface available to CMake as `INIReader` (install system-wide or add it as a submodule and expose the target).
 - `curl` (Linux/macOS) or the Windows URLMon APIs (already part of Win32) for downloading requirement archives.
 
 ### Build
@@ -89,23 +88,25 @@ cmake --build build
 
 The build step generates `resources.c` from `resources/resources.xml` using `glib-compile-resources`. Ensure that tool is discoverable on your `PATH`.
 
+> **macOS workflow:** Install the dependencies via `brew install glib libffi zlib boost qt spdlog` (Boost supplies `<boost/process.hpp>` and Qt6 supplies the GUI). Homebrew's `pkg-config` should expose `gio-2.0` after those installs; if it does not, export `PKG_CONFIG_PATH="/opt/homebrew/opt/libffi/lib/pkgconfig:/opt/homebrew/lib/pkgconfig:/opt/homebrew/share/pkgconfig:$PKG_CONFIG_PATH"` (adjust the prefixes if needed) and rerun `pkg-config --modversion gio-2.0` to confirm it resolves to the Homebrew install. You can run `scripts/build_macos.sh` to apply the environment tweaks automatically and execute `cmake -S … && cmake --build …` in one step.
+
 ### Run
 
-After building, run the launcher from the project root so it can find `pyappexec.ini`:
+After building, run the launcher from the project root:
 
 ```bash
 ./build/pyappexec
 ```
 
-The launcher uses the INI file next to the executable (or the current working directory) to decide what to do. You can ship multiple INI files if you want different app profiles; point PyAppExec at the desired one by copying or symlinking it alongside the binary.
+PyAppExec first looks for `pyappexec.ini` in the current directory; if it is not found, it scans each immediate subdirectory (this is how the sample config in `test2/pyappexec.ini` is discovered). To point at a specific file explicitly, pass `--config /path/to/pyappexec.ini`.
 
 ### GUI mode
 
-Set `GUI = true` under the relevant `[<OS>:main]` section to launch the Qt6 front-end. The GUI embeds the CLI output (PowerShell on Windows, Terminal on macOS/Linux), shows a progress indicator, and surfaces blocking error dialogs if anything fails. Pass `--no-gui` on the command line or set `GUI = false` to force the traditional CLI experience even when the INI enables the GUI.
+Set `GUI = true` under the relevant `[<OS>:main]` section to launch the Qt6 front-end. The GUI embeds the CLI output (PowerShell on Windows, Terminal on macOS/Linux), shows a progress indicator, and surfaces blocking error dialogs if anything fails. Pass `--no-gui` on the command line or set `GUI = false` to force the traditional CLI experience even when the INI enables the GUI. Use `--config /path/to/pyappexec.ini` to point the launcher at a specific configuration file.
 
 ## Configuration
 
-PyAppExec is driven entirely by `pyappexec.ini`. Each operating system gets its own pair of sections: `[Linux:main]` and `[Linux:requirements]`, `[Windows:main]` and `[Windows:requirements]`, and so on.
+PyAppExec is driven entirely by `pyappexec.ini`. Each operating system gets its own pair of sections: `[Linux:main]` and `[Linux:requirements]`, `[Windows:main]` and `[Windows:requirements]`, and so on. Keep the INI alongside your Python application (like the sample `test2/pyappexec.ini`) so relative paths resolve naturally; PyAppExec automatically discovers it when launched from the project root.
 
 ### Main section
 
@@ -197,7 +198,7 @@ requirement_1_cmd_params = /S /quiet
 
 On Windows, optional `cmd_params` can be supplied to run silent installers.
 
-A macOS profile follows the same pattern with `[MacOS:main]` and `[MacOS:requirements]` sections; the sample `pyappexec.ini` in the repository shows how to point those entries at the same application while using a platform-appropriate Python installer URL and Homebrew-based FFmpeg installation command.
+A macOS profile follows the same pattern with `[MacOS:main]` and `[MacOS:requirements]` sections; the sample `test2/pyappexec.ini` shows how to point those entries at the same application while using a platform-appropriate Python installer URL and Homebrew-based FFmpeg installation command.
 
 ### Working with `pyproject.toml`, Poetry, Pipenv, uv, etc.
 
@@ -221,7 +222,7 @@ The `test/` directory contains the open-source YT Channel Downloader project as 
 2. Ensure `ffmpeg` is installed or let the Linux configuration install it for you.
 3. Run `./build/pyappexec` from the repository root. The launcher will set up a virtual environment under `test/.pyappexec-venv`, install Python dependencies from `test/requirements.txt`, and start the PyQt application defined in `test/main.py`.
 
-You can swap out the `test/` directory with your own Python app by updating `pyappexec.ini`.
+You can swap out the `test2/` directory with your own Python app by updating `pyappexec.ini`.
 
 ## Read the Docs site
 
@@ -257,7 +258,6 @@ The test scripts live under `tests/` and can be extended as the project grows.
 
 - **Python not detected**: Confirm that a compatible interpreter is available on the `PATH`. On Linux, check the console logs to see if PyAppExec attempted package-manager installation.
 - **`glib-compile-resources` missing**: Install the GLib development tools package (`libglib2.0-dev-bin` on Debian/Ubuntu, `glib2` on Arch, `brew install glib` on macOS).
-- **`INIReader` target not found**: Install the `inih` library or add it to your workspace and expose an `INIReader` target to CMake.
 - **External requirement download fails**: Verify the URL, ensure HTTPS certificates are trusted, and check that the host is reachable in your deployment environment.
 - **Virtual environment issues**: Remove the existing virtual environment directory (for example `test/.pyappexec-venv`) and rerun the launcher to force a clean setup.
 
@@ -273,5 +273,4 @@ This project is released under the [MIT License](LICENSE).
 
 - [Boost.Process](https://www.boost.org/doc/libs/release/doc/html/process.html) for portable child process management.
 - [GLib/GIO](https://docs.gtk.org/gio/) for resource embedding.
-- [inih](https://github.com/benhoyt/inih) for INI parsing.
 - The [YT Channel Downloader](https://github.com/hyperfield/yt-channel-downloader) project for the sample Python application included under `test/`.
