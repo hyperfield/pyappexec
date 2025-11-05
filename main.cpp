@@ -262,10 +262,10 @@ int main(int argc, char** argv)
         if (result != 0) {
             writeGuiPreference(guiPreferenceFile, false);
         } else {
-            spdlog::info("Bootstrapped by PyAppExec {} ({}). Project: {}",
-                         AppMetadata::kVersion,
-                         AppMetadata::kYears,
-                         AppMetadata::kGithub);
+            std::cout << "Bootstrapped by PyAppExec "
+                      << AppMetadata::kVersion << " ("
+                      << AppMetadata::kYears << "). Project: "
+                      << AppMetadata::kGithub << std::endl;
         }
         return result;
 
