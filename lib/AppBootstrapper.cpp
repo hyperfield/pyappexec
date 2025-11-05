@@ -2,7 +2,8 @@
 #include "SpecConfig.hpp"
 #include "Utils.hpp"
 #include <algorithm>
-#include <boost/process.hpp>
+#define BOOST_PROCESS_VERSION 1
+#include <boost/process/v1.hpp>
 #include <cstdlib>
 #include <system_error>
 #include <cctype>
@@ -15,7 +16,7 @@
 #include <spdlog/spdlog.h>
 
 namespace fs = std::filesystem;
-namespace bp = boost::process;
+namespace bp = boost::process::v1;
 
 namespace {
 std::string trimCopy(const std::string& input) {
@@ -47,14 +48,22 @@ void AppBootstrapper::parseConfig()
     std::string mainSection = osPrefix + ":main";
     std::string reqSection = osPrefix + ":requirements";
 
-    python_download_url = specConfig.get_value(mainSection, "python_download_url", false);
-    python_min_ver = specConfig.get_value(mainSection, "python_min_ver", true);
+    parseMainSection(mainSection);
+    parseRequirementsSection(reqSection);
+}
+
+
+void AppBootstrapper::parseMainSection(const std::string& mainSection)
+{
+    std::string pythonAppDirValue = specConfig.get_value(mainSection, "python_app_dir", false);
     std::string execPathValue = specConfig.get_value(mainSection, "exec_app_path", true);
     std::string execArgsValue = specConfig.get_value(mainSection, "exec_app_args", false);
     std::string execEnvValue = specConfig.get_value(mainSection, "exec_env", false);
     std::string requirementsValue = specConfig.get_value(mainSection, "requirements_file", false);
-    std::string pythonAppDirValue = specConfig.get_value(mainSection, "python_app_dir", false);
     std::string virtualEnvValue = specConfig.get_value(mainSection, "virtual_env_dir", false);
+
+    python_download_url = specConfig.get_value(mainSection, "python_download_url", false);
+    python_min_ver = specConfig.get_value(mainSection, "python_min_ver", true);
 
     fs::path configDir = specConfig.getConfigDir();
     if (pythonAppDirValue.empty()) {
@@ -93,8 +102,14 @@ void AppBootstrapper::parseConfig()
     virtual_env_path = resolvePath(virtualEnvValue, python_app_dir);
 
     requirements.clear();
+}
 
+
+void AppBootstrapper::parseRequirementsSection(const std::string& reqSection)
+{
     int index = 1;
+    requirements.clear();
+
     while (true) {
         std::string key_name = "requirement_" + std::to_string(index);
         std::string key_url = "requirement_" + std::to_string(index) + "_url";
@@ -233,54 +248,23 @@ bool AppBootstrapper::installPythonDependencies()
         return true;
     }
 
-    if (!fs::exists(requirements_file)) {
-        spdlog::error("Requirements file not found: {}", requirements_file.string());
-        return false;
-    }
-
-    fs::path pythonExecutable = getVirtualEnvPythonExecutable();
-    if (!fs::exists(pythonExecutable)) {
-        spdlog::error("Virtual environment Python executable not found at {}",
-                       pythonExecutable.string());
+    fs::path pythonExecutable;
+    if (!ensureRequirementsInputs(pythonExecutable)) {
         return false;
     }
 
     fs::path stateFile = getRequirementsStateFile();
     std::string signature = computeRequirementsSignature();
-    std::string existingSignature;
-
-    if (!signature.empty() && fs::exists(stateFile)) {
-        std::ifstream stateIn(stateFile);
-        if (stateIn) {
-            std::getline(stateIn, existingSignature);
-        }
-    }
-
-    if (!signature.empty() && signature == existingSignature) {
+    
+    if (isRequirementsStateCurrent(signature, stateFile)) {
         spdlog::info("Python dependencies already installed; requirements file unchanged.");
         return true;
     }
 
-    auto runPython = [&](const std::vector<std::string>& args, const std::string& action) -> bool {
-        try {
-            bp::child process(
-                bp::exe = pythonExecutable.string(),
-                bp::args = args,
-                bp::start_dir = python_app_dir.string()
-            );
-            process.wait();
-            if (process.exit_code() != 0) {
-                spdlog::error("Failed to {} (exit code {}).", action, process.exit_code());
-                return false;
-            }
-            return true;
-        } catch (const std::exception& err) {
-            spdlog::error("Failed to {}: {}", action, err.what());
-            return false;
-        }
-    };
-
-    if (!runPython({"-m", "pip", "install", "--upgrade", "pip"}, "upgrade pip")) {
+    if (!runPythonInVirtualEnv(
+            pythonExecutable,
+            {"-m", "pip", "install", "--upgrade", "pip"},
+            "upgrade pip")) {
         return false;
     }
 
@@ -288,7 +272,7 @@ bool AppBootstrapper::installPythonDependencies()
         "-m", "pip", "install", "-r", requirements_file.string()
     };
 
-    if (!runPython(installArgs, "install Python dependencies")) {
+    if (!runPythonInVirtualEnv(pythonExecutable, installArgs, "install Python dependencies")) {
         return false;
     }
 
@@ -427,7 +411,10 @@ bool AppBootstrapper::downloadRequirements()
 
     if (!Utils::ensureDirExists("distrib/")) {
         spdlog::error("Failed to create 'distrib/' directory.");
-        return false;
+        // if the directory now exists, we assume another process created it between calls
+        if (!fs::exists("distrib/")) {
+            return false;
+        }
     }
 
     bool allDownloadsSuccessful = true;
@@ -549,8 +536,8 @@ std::string AppBootstrapper::computeRequirementsSignature() const
 
     std::ostringstream oss;
     oss << requirements_file.string() << '|'
-        << fs::file_size(requirements_file) << '|'
-        << fs::last_write_time(requirements_file).time_since_epoch().count();
+        << static_cast<long long>(fs::file_size(requirements_file)) << '|'
+        << static_cast<long long>(fs::last_write_time(requirements_file).time_since_epoch().count());
     return oss.str();
 }
 
@@ -566,6 +553,145 @@ void AppBootstrapper::persistRequirementsSignature(const std::string& signature)
         out << signature;
     }
 }
+
+bool AppBootstrapper::ensureRequirementsInputs(std::filesystem::path& pythonExecutable) const
+{
+    if (!fs::exists(requirements_file)) {
+        spdlog::error("Requirements file not found: {}", requirements_file.string());
+        return false;
+    }
+
+    pythonExecutable = getVirtualEnvPythonExecutable();
+    if (!fs::exists(pythonExecutable)) {
+        spdlog::error(
+            "Virtual environment Python executable not found at {}",
+            pythonExecutable.string());
+        return false;
+    }
+
+    return true;
+}
+
+
+bool AppBootstrapper::isRequirementsStateCurrent(
+    const std::string& signature,
+    const std::filesystem::path& stateFile) const
+{
+    if (signature.empty() || !fs::exists(stateFile)) {
+        return false;
+    }
+
+    std::ifstream stateIn(stateFile);
+    if (!stateIn) {
+        return false;
+    }
+
+    std::string existingSignature;
+    std::getline(stateIn, existingSignature);
+    return signature == existingSignature;
+}
+
+
+bool AppBootstrapper::runPythonInVirtualEnv(
+    const std::filesystem::path& pythonExecutable,
+    const std::vector<std::string>& args,
+    const std::string& action) const
+{
+    try {
+        bp::child process(
+            bp::exe = pythonExecutable.string(),
+            bp::args = args,
+            bp::start_dir = python_app_dir.string());
+        process.wait();
+        if (process.exit_code() != 0) {
+            spdlog::error("Failed to {} (exit code {}).", action, process.exit_code());
+            return false;
+        }
+        return true;
+    } catch (const std::exception& err) {
+        spdlog::error("Failed to {}: {}", action, err.what());
+        return false;
+    }
+}
+
+#if defined(__linux__)
+
+const std::vector<AppBootstrapper::PackageManagerInfo>& AppBootstrapper::getPackageManagers()
+{
+    static const std::vector<PackageManagerInfo> managers = {
+        {
+            "apt",
+            "command -v apt-get",
+            "apt-cache policy python3 | grep Candidate",
+            R"(Candidate:\s*([0-9.]+))",
+            "sudo apt-get update && sudo apt-get install -y python3"
+        },
+        {
+            "dnf",
+            "command -v dnf",
+            "dnf --showduplicates list python3 2>/dev/null | tail -n 1",
+            R"(python3\s+([0-9.]+))",
+            "sudo dnf install -y python3"
+        },
+        {
+            "pacman",
+            "command -v pacman",
+            "pacman -Si python | grep Version",
+            R"(Version\s*:\s*([0-9.]+))",
+            "sudo pacman -S --noconfirm python"
+        }
+    };
+
+    return managers;
+}
+
+
+bool AppBootstrapper::isManagerAvailable(const PackageManagerInfo& manager) const
+{
+    int available = std::system((manager.availabilityCheck + " >/dev/null 2>&1").c_str());
+    return available == 0;
+}
+
+
+std::optional<std::string> AppBootstrapper::queryManagerVersion(const PackageManagerInfo& manager) const
+{
+    try {
+        std::string output = Utils::runAndCaptureOutput(
+            std::string("/bin/bash -lc \"") + manager.versionQuery + "\"",
+            true);
+        std::string offeredVersion = Utils::extractVersion(output, manager.versionRegex);
+        offeredVersion = trimCopy(offeredVersion);
+
+        if (offeredVersion.empty()) {
+            spdlog::info("Unable to determine Python version offered by {}.", manager.name);
+            return std::nullopt;
+        }
+
+        return offeredVersion;
+    } catch (const std::exception& err) {
+        spdlog::error("Failed to query {} for Python versions: {}", manager.name, err.what());
+        return std::nullopt;
+    }
+}
+
+
+bool AppBootstrapper::installViaManager(const PackageManagerInfo& manager) const
+{
+    spdlog::info("Attempting to install/upgrade Python via {}...", manager.name);
+    int installResult = std::system(manager.installCommand.c_str());
+    if (installResult == 0) {
+        spdlog::info("Python installation via {} completed.", manager.name);
+        return true;
+    }
+
+    spdlog::error(
+        "{} installation command failed with exit code {}",
+        manager.name,
+        installResult);
+    return false;
+}
+
+#endif
 
 
 std::vector<std::string> AppBootstrapper::parseCommandArguments(const std::string& args)
@@ -734,72 +860,28 @@ std::string AppBootstrapper::getOSPrefix()
 bool AppBootstrapper::tryInstallPythonFromCommonPackageManagers()
 {
 #if defined(__linux__)
-    struct PackageManagerInfo {
-        std::string name;
-        std::string availabilityCheck;
-        std::string versionQuery;
-        std::string versionRegex;
-        std::string installCommand;
-    };
-
-    const std::vector<PackageManagerInfo> managers = {
-        {
-            "apt",
-            "command -v apt-get",
-            "apt-cache policy python3 | grep Candidate",
-            R"(Candidate:\s*([0-9.]+))",
-            "sudo apt-get update && sudo apt-get install -y python3"
-        },
-        {
-            "dnf",
-            "command -v dnf",
-            "dnf --showduplicates list python3 2>/dev/null | tail -n 1",
-            R"(python3\s+([0-9.]+))",
-            "sudo dnf install -y python3"
-        },
-        {
-            "pacman",
-            "command -v pacman",
-            "pacman -Si python | grep Version",
-            R"(Version\s*:\s*([0-9.]+))",
-            "sudo pacman -S --noconfirm python"
-        }
-    };
-
-    for (const auto& manager : managers) {
-        int available = std::system((manager.availabilityCheck + " >/dev/null 2>&1").c_str());
-        if (available != 0) {
+    for (const auto& manager : getPackageManagers()) {
+        if (!isManagerAvailable(manager)) {
             continue;
         }
 
-        try {
-            std::string output = Utils::runAndCaptureOutput("/bin/bash -lc \"" + manager.versionQuery + "\"", true);
-            std::string offeredVersion = Utils::extractVersion(output, manager.versionRegex);
-            offeredVersion = trimCopy(offeredVersion);
-
-            if (offeredVersion.empty()) {
-                spdlog::info("Unable to determine Python version offered by {}.", manager.name);
-                continue;
-            }
-
-            if (!python.isPythonVersionAtLeast(offeredVersion, python_min_ver)) {
-                spdlog::warn("{} offers Python {}, which is below required version {}",
-                              manager.name, offeredVersion, python_min_ver);
-                continue;
-            }
-
-            spdlog::info("Attempting to install/upgrade Python via {}...", manager.name);
-            int installResult = std::system(manager.installCommand.c_str());
-            if (installResult == 0) {
-                spdlog::info("Python installation via {} completed.", manager.name);
-                return true;
-            } else {
-                spdlog::error("{} installation command failed with exit code {}", manager.name, installResult);
-                return false;
-            }
-        } catch (const std::exception& err) {
-            spdlog::error("Failed to query {} for Python versions: {}", manager.name, err.what());
+        auto offeredVersion = queryManagerVersion(manager);
+        if (!offeredVersion.has_value()) {
+            continue;
         }
+
+        if (!python.isPythonVersionAtLeast(*offeredVersion, python_min_ver)) {
+            spdlog::warn("{} offers Python {}, which is below required version {}",
+                         manager.name, *offeredVersion, python_min_ver);
+            continue;
+        }
+
+        if (installViaManager(manager)) {
+            return true;
+        }
+
+        // installation attempt failed; stop early since installViaManager already logged why
+        return false;
     }
 
     spdlog::error("No supported package manager could provide the required Python version.");

@@ -19,6 +19,7 @@ private:
     static std::string trimVersionString(const std::string& rawVersion);
 
     std::string cachedPythonCommand;
+    // cppcheck-suppress unusedPrivateField
     std::string cachedPythonVersion;
 };
 

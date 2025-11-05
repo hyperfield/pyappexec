@@ -1,16 +1,20 @@
 #include "gui/MainWindow.hpp"
 
 #include <QCoreApplication>
+// cppcheck-suppress missingIncludeSystem
 #include <QFontDatabase>
 #include <QHBoxLayout>
 #include <QLabel>
+// cppcheck-suppress missingIncludeSystem
 #include <QMessageBox>
 #include <QPlainTextEdit>
+// cppcheck-suppress missingIncludeSystem
 #include <QProcess>
 #include <QProgressBar>
 #include <QPushButton>
 #include <QScrollBar>
 #include <QTextCursor>
+// cppcheck-suppress missingIncludeSystem
 #include <QVBoxLayout>
 #include <QObject>
 

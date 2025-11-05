@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <spdlog/sinks/null_sink.h>
+// cppcheck-suppress missingIncludeSystem
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/spdlog.h>
 

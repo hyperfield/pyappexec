@@ -1,7 +1,10 @@
 #include "Utils.hpp"
 #include <array>
-#include <boost/process.hpp>
+#define BOOST_PROCESS_VERSION 1
+#include <boost/process/v1.hpp>
+// cppcheck-suppress missingIncludeSystem
 #include <filesystem>
+// cppcheck-suppress missingIncludeSystem
 #include <gio/gio.h>
 #include <memory>
 #include "resources.h"
@@ -9,10 +12,13 @@
 #include <sstream>
 #include <string>
 #include <iostream>
+// cppcheck-suppress missingIncludeSystem
 #include <vector>
+// cppcheck-suppress missingIncludeSystem
 #include <spdlog/spdlog.h>
 
 #ifdef _WIN32
+    // cppcheck-suppress missingIncludeSystem
     #include <windows.h>
     #include <urlmon.h>
     #pragma comment(lib, "urlmon.lib")
@@ -27,7 +33,7 @@
 #endif
 
 namespace fs = std::filesystem;
-namespace bp = boost::process;
+namespace bp = boost::process::v1;
 
 
 std::string Utils::runPythonScriptFromResourceAndCaptureOutput(const std::string& script_name, const std::string& python_cmd)

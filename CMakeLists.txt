@@ -2,10 +2,14 @@ cmake_minimum_required(VERSION 3.16)
 
 project(pyappexec LANGUAGES C CXX)
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON CACHE BOOL "Export compile_commands.json for tooling" FORCE)
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_AUTOMOC ON)
+
+add_compile_definitions(BOOST_PROCESS_VERSION=1)
 
 find_package(Qt6 COMPONENTS Widgets REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
@@ -33,6 +37,7 @@ set_source_files_properties(${GENERATED_RESOURCE_C} PROPERTIES GENERATED TRUE)
 
 set(SOURCES
     main.cpp
+    lib/INIReader.cpp
     lib/AppBootstrapper.cpp
     lib/PythonManager.cpp
     lib/SpecConfig.cpp
@@ -54,7 +59,6 @@ target_include_directories(pyappexec
 target_link_libraries(pyappexec
     PRIVATE
         PkgConfig::GIO
-        INIReader
         Qt6::Widgets
         spdlog::spdlog
 )

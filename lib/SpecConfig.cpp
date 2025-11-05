@@ -1,5 +1,6 @@
 #include "INIReader.h"
 #include "SpecConfig.hpp"
+// cppcheck-suppress missingIncludeSystem
 #include <filesystem>
 #include <string>
 

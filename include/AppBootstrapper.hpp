@@ -15,9 +15,11 @@ struct Requirement {
     std::string file_name;
     std::string cmd_params;
     std::string version_check_command;
+    // cppcheck-suppress unusedStructMember
     std::string version_regex;
     std::string min_version;
     std::string launch_file;
+    // cppcheck-suppress unusedStructMember
     bool capture_stderr{false};
     std::string install_command;
     std::optional<bool> last_version_check_result;
@@ -62,6 +64,7 @@ private:
     bool virtual_env_reported_{false};
 
     std::string python_download_url;
+    // cppcheck-suppress unusedPrivateField
     std::string python_min_ver;
     std::filesystem::path python_app_dir;
     std::filesystem::path exec_app_path;
@@ -70,6 +73,7 @@ private:
     std::vector<std::string> exec_app_args;
     std::vector<std::pair<std::string, std::string>> exec_app_env;
 
+    // cppcheck-suppress unusedPrivateField
     std::vector<Requirement> requirements;
     
     void parseConfig();
@@ -78,6 +82,27 @@ private:
     std::filesystem::path getRequirementsStateFile() const;
     std::string computeRequirementsSignature() const;
     void persistRequirementsSignature(const std::string& signature) const;
+    void parseMainSection(const std::string& mainSection);
+    void parseRequirementsSection(const std::string& reqSection);
+    bool ensureRequirementsInputs(std::filesystem::path& pythonExecutable) const;
+    bool isRequirementsStateCurrent(const std::string& signature, const std::filesystem::path& stateFile) const;
+    bool runPythonInVirtualEnv(
+        const std::filesystem::path& pythonExecutable,
+        const std::vector<std::string>& args,
+        const std::string& action) const;
+#if defined(__linux__)
+    struct PackageManagerInfo {
+        std::string name;
+        std::string availabilityCheck;
+        std::string versionQuery;
+        std::string versionRegex;
+        std::string installCommand;
+    };
+    static const std::vector<PackageManagerInfo>& getPackageManagers();
+    bool isManagerAvailable(const PackageManagerInfo& manager) const;
+    std::optional<std::string> queryManagerVersion(const PackageManagerInfo& manager) const;
+    bool installViaManager(const PackageManagerInfo& manager) const;
+#endif
     static std::vector<std::string> parseCommandArguments(const std::string& args);
     static std::vector<std::pair<std::string, std::string>> parseEnvironmentAssignments(const std::string& envSpec);
 };
