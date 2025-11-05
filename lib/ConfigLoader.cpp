@@ -85,3 +85,18 @@ std::string ConfigLoader::determineAppDisplayName(const SpecConfig& specConfig) 
 
     return fallbackName();
 }
+
+std::filesystem::path ConfigLoader::resolveAppRelativePath(const std::filesystem::path& pythonAppDir,
+                                                           const std::string& entry) const
+{
+    if (entry.empty()) {
+        return {};
+    }
+
+    std::filesystem::path path(entry);
+    if (path.is_absolute()) {
+        return path;
+    }
+
+    return pythonAppDir / path;
+}

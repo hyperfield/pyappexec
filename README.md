@@ -310,6 +310,12 @@ This project is released under the [MIT License](LICENSE).
 
 ## Acknowledgements
 
-- [Boost.Process](https://www.boost.org/doc/libs/release/doc/html/process.html) for portable child process management.
-- [GLib/GIO](https://docs.gtk.org/gio/) for resource embedding.
-- The [YT Channel Downloader](https://github.com/hyperfield/yt-channel-downloader) project for the sample Python application included under `test/`.
+PyAppExec builds on the excellent work of the open-source community:
+
+- [Qt 6](https://www.qt.io/) for the optional GUI front-end.
+- [Boost.Process](https://www.boost.org/doc/libs/release/doc/html/process.html) for portable process management.
+- [GLib/GIO](https://docs.gtk.org/gio/) for resource embedding and cross-platform file utilities.
+- [spdlog](https://github.com/gabime/spdlog) for fast structured logging.
+- [ImageMagick](https://imagemagick.org/) for automating icon generation.
+
+Thank you to the maintainers and contributors of these projects for making PyAppExec possible.

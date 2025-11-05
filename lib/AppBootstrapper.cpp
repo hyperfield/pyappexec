@@ -812,49 +812,61 @@ std::vector<std::pair<std::string, std::string>> AppBootstrapper::parseEnvironme
 }
 
 
-bool AppBootstrapper::isRequirementAlreadyInstalled(Requirement& req)
-{
-    if (req.version_check_command.empty()) {
-        return false;
-    }
+namespace {
 
+std::optional<std::string> extractRequirementVersion(const Requirement& req)
+{
     try {
         std::string output = Utils::runAndCaptureOutput(req.version_check_command, req.capture_stderr);
         std::string version = req.version_regex.empty()
             ? trimCopy(output)
             : Utils::extractVersion(output, req.version_regex);
         version = trimCopy(version);
-
         if (version.empty()) {
-            return false;
+            return std::nullopt;
         }
-
-        if (req.min_version.empty()) {
-            if (!req.status_reported) {
-                spdlog::info("{} detected (version {}).", req.name, version);
-            }
-            req.last_version_check_result = true;
-            req.status_reported = true;
-            return true;
-        }
-
-        bool meets = Utils::isVersionAtLeast(version, req.min_version);
-        bool shouldLog = !req.status_reported || !req.last_version_check_result.has_value() || req.last_version_check_result.value() != meets;
-        if (shouldLog) {
-            if (meets) {
-                spdlog::info("{} {} meets minimum version {}", req.name, version, req.min_version);
-            } else {
-                spdlog::warn("{} {} is below required version {}", req.name, version, req.min_version);
-            }
-        }
-        req.last_version_check_result = meets;
-        req.status_reported = true;
-
-        return meets;
+        return version;
     } catch (const std::exception& err) {
         spdlog::error("Requirement check for {} failed: {}", req.name, err.what());
+        return std::nullopt;
+    }
+}
+
+void logRequirementStatus(const Requirement& req, const std::string& version, bool meets)
+{
+    const bool shouldLog = !req.status_reported || !req.last_version_check_result.has_value() ||
+        req.last_version_check_result.value() != meets;
+    if (!shouldLog) {
+        return;
+    }
+
+    if (req.min_version.empty() || meets) {
+        spdlog::info("{} {} meets minimum version {}", req.name, version,
+                     req.min_version.empty() ? version : req.min_version);
+    } else {
+        spdlog::warn("{} {} is below required version {}", req.name, version, req.min_version);
+    }
+}
+
+} // namespace
+
+bool AppBootstrapper::isRequirementAlreadyInstalled(Requirement& req)
+{
+    if (req.version_check_command.empty()) {
         return false;
     }
+
+    auto versionOpt = extractRequirementVersion(req);
+    if (!versionOpt) {
+        return false;
+    }
+    const std::string& version = *versionOpt;
+
+    bool meets = req.min_version.empty() || Utils::isVersionAtLeast(version, req.min_version);
+    logRequirementStatus(req, version, meets);
+    req.last_version_check_result = meets;
+    req.status_reported = true;
+    return meets;
 }
 
 
