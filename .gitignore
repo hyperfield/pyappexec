@@ -46,6 +46,9 @@ build/
 test/
 test2/
 
+# macOS artifacts
+.DS_Store
+
 # Debugging artifacts
 core*
 
