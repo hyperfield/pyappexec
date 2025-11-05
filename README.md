@@ -100,9 +100,15 @@ After building, run the launcher from the project root:
 
 PyAppExec first looks for `pyappexec.ini` in the current directory; if it is not found, it scans each immediate subdirectory (this is how the sample config in `test2/pyappexec.ini` is discovered). To point at a specific file explicitly, pass `--config /path/to/pyappexec.ini`.
 
+**Useful flags**
+
+- `--config /path/to/pyappexec.ini` – override the config discovery logic described above.
+- `--no-gui` – force CLI mode even when the INI requests the Qt front-end.
+- `--reset-gui` – clear the persisted "hide GUI" preference (handy if you previously suppressed the GUI after a successful run).
+
 ### GUI mode
 
-Set `GUI = true` under the relevant `[<OS>:main]` section to launch the Qt6 front-end. The GUI embeds the CLI output (PowerShell on Windows, Terminal on macOS/Linux), shows a progress indicator, and surfaces blocking error dialogs if anything fails. Pass `--no-gui` on the command line or set `GUI = false` to force the traditional CLI experience even when the INI enables the GUI. Use `--config /path/to/pyappexec.ini` to point the launcher at a specific configuration file.
+Set `GUI = true` under the relevant `[<OS>:main]` section to launch the Qt6 front-end. The GUI embeds the CLI output (PowerShell on Windows, Terminal on macOS/Linux), shows a progress indicator, and surfaces blocking error dialogs if anything fails. When a run completes successfully you can check “Hide GUI after successful runs” before closing the window; PyAppExec will remember that preference (per app) and skip the GUI going forward, automatically re-enabling it if a later run fails. Pass `--no-gui` on the command line or set `GUI = false` to force the traditional CLI experience even when the INI enables the GUI. Use `--config /path/to/pyappexec.ini` to point the launcher at a specific configuration file, and `--reset-gui` to clear any saved GUI suppression preference.
 
 ## Configuration
 
