@@ -1,6 +1,6 @@
 # PyAppExec
 
-PyAppExec is a small, cross-platform bootstrapper that prepares a Python application for end users. It locates (or installs) a suitable Python interpreter, provisions an isolated virtual environment, downloads any third-party tooling you bundle, installs Python dependencies, and finally launches your target script — all driven by a simple INI specification.
+PyAppExec is a cross-platform bootstrapper that prepares a Python application for end users. It locates (or installs) a suitable Python interpreter, provisions an isolated virtual environment, downloads any third-party tooling you bundle, installs Python dependencies, and finally launches your target script - all driven by a simple `.ini` file specification.
 
 - [Overview](#overview)
 - [Key Features](#key-features)
@@ -24,30 +24,30 @@ PyAppExec is a small, cross-platform bootstrapper that prepares a Python applica
 
 ## Overview
 
-Many desktop Python applications require users to install Python, set up virtual environments, download extra binaries such as FFmpeg, and install Python packages before they can run the app. PyAppExec automates those steps so you can distribute a native launcher alongside your Python project. Ship the PyAppExec binary, ship an INI configuration that describes what the launcher should do, and PyAppExec takes care of the rest.
+Many Python applications require users to install Python, set up virtual environments, download extra outside dependencies, and install Python packages before they can run the app. PyAppExec automates those steps so you can distribute a native binary launcher alongside your Python project. Ship the PyAppExec binary, ship an `.ini` configuration that describes what the launcher should do, and PyAppExec takes care of the rest.
 
 ## Key Features
 
 - Detects the highest priority Python interpreter on the PATH and validates its version.
+- Allows per-platform `.ini` sections so Windows, macOS, and Linux can point at platform-specific scripts, download URLs, and tooling.
 - On Linux, optionally installs Python via `apt`, `dnf`, or `pacman` if a suitable interpreter is not found.
 - Creates or reuses a per-project virtual environment and keeps a lightweight state file to avoid redundant `pip install` runs.
 - Installs Python package dependencies from a configurable requirements file inside the virtual environment.
-- Downloads and, when possible, installs external tools such as FFmpeg, using integrity checks to avoid re-downloading unchanged files.
+- Downloads and, when possible, installs external tools, using integrity checks to avoid re-downloading unchanged files.
 - Launches the target Python entry point after the environment is ready, with stdout/stderr feedback in the terminal.
-- Allows per-platform INI sections so Windows, macOS, and Linux can point at platform-specific scripts, download URLs, and tooling.
-- Accepts optional command-line arguments and environment overrides from the INI so you can tailor the launched Python process without rebuilding.
-- Ships with an optional Qt6 front-end that surfaces progress, embedded terminal output, and error dialogs; fall back to CLI mode with a single flag.
-- Emits structured logs via spdlog so you can tail progress or integrate with external log collectors.
+- Accepts optional command-line arguments and environment overrides from the `.ini`.
+- Ships with an optional Qt6 front-end that surfaces progress, embedded terminal output, and error dialogs.
+- Emits structured logs via `spdlog` so you can tail progress or integrate with external log collectors.
 - Embeds helper Python scripts via GLib resources so the launcher has zero runtime script dependencies.
 
 ## How It Works
 
 1. PyAppExec reads `pyappexec.ini` and selects the `[<OS>:main]` and `[<OS>:requirements]` sections that match the current platform (`Linux`, `MacOS`, `Windows`).
-2. It resolves relative paths against the directory that contains the INI file.
-3. If no suitable Python interpreter is found, PyAppExec can attempt an installation via common package managers (Linux only) or fall back to the configured download URL so you can prompt users to install it manually.
+2. It resolves relative paths against the directory that contains the `.ini` file.
+3. If no suitable Python interpreter is found, PyAppExec can attempt an installation via common package managers (on Linux) or fall back to the configured download URL so you can prompt users to install it manually.
 4. A virtual environment is created (or reused) at the configured location.
 5. Python dependencies from `requirements.txt` (or whichever file you point to) are installed inside that environment. A signature file prevents redundant installs when the requirements file has not changed.
-6. For each external requirement defined in the INI file, PyAppExec checks whether it is already present and satisfies the minimum version. Missing dependencies are downloaded to the `distrib/` directory or installed via a custom command.
+6. For each external requirement defined in the `.ini` file, PyAppExec checks whether it is already present and satisfies the minimum version. Missing dependencies are downloaded to the `distrib/` directory or installed via a custom command.
 7. Finally, the target Python script is invoked using the virtual environment's interpreter.
 
 ## Repository Layout
@@ -55,11 +55,14 @@ Many desktop Python applications require users to install Python, set up virtual
 ```
 .
 ├── CMakeLists.txt          # CMake build configuration for the C++ launcher
-├── include/                # Public headers for the launcher
-├── lib/                    # Implementation sources
-├── resources/              # GLib resource manifest embedding helper scripts
-├── scripts/                # Embedded helper Python scripts
-├── pyappexec.ini           # Example configuration
+├── main.cpp                # Entry point that drives the CLI/GUI bootstrapper
+├── include/                # Public headers shared between the CLI and GUI layers
+├── lib/                    # Core launcher implementation (AppBootstrapper, utils, etc.)
+├── gui/                    # Qt6 widgets for the optional front-end (MainWindow, GuiRunner)
+├── resources/              # GLib resource manifest plus embedded Python helper scripts
+├── scripts/                # Source copies of the embedded helper scripts
+├── pyappexec.ini           # Example configuration that targets the sample app
+├── LICENSE / README.md     # Project metadata and documentation
 ```
 
 ## Getting Started
@@ -237,6 +240,7 @@ Open `_build/html/index.html` in your browser to inspect the generated documenta
 
 - The launcher automatically embeds `scripts/get_python_version.py` using GLib resources; edit `resources/resources.xml` if you need to ship additional helper scripts.
 - A build generates `.pyappexec_requirements_state` under the virtual environment directory to cache the requirements signature. Delete it if you need to force a reinstall.
+- CMake now emits `compile_commands.json` in your build directory (thanks to `CMAKE_EXPORT_COMPILE_COMMANDS=ON`). Point Codacy/Cppcheck at that file (or copy it to the repo root) so they analyze the real translation units instead of header-only snapshots.
 - Boost.Process powers all child process execution. Ensure the runtime has permission to spawn subprocesses and access network resources.
 
 ## Testing
