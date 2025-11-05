@@ -1,0 +1,5 @@
+<RCC>
+  <qresource prefix="/net/quicknode/pyappexec">
+    <file alias="logo.png">images/logo.png</file>
+  </qresource>
+</RCC>

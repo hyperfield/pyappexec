@@ -21,6 +21,7 @@
 #include <QProgressBar>
 #include <QPushButton>
 #include <QScrollBar>
+#include <QPixmap>
 #include <QTextCursor>
 // cppcheck-suppress missingIncludeSystem
 #include <QVBoxLayout>
@@ -232,6 +233,13 @@ void MainWindow::showAboutPyAppExec()
     dialog.resize(420, 320);
 
     auto* layout = new QVBoxLayout(&dialog);
+
+    if (QPixmap pix(QStringLiteral(":/net/quicknode/pyappexec/logo.png")); !pix.isNull()) {
+        auto* logoLabel = new QLabel(&dialog);
+        logoLabel->setAlignment(Qt::AlignHCenter);
+        logoLabel->setPixmap(pix.scaled(128, 128, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        layout->addWidget(logoLabel);
+    }
 
     auto* textLabel = new QLabel(QStringLiteral(
         "<b>%1</b> is bootstrapped by %2.<br><br>"

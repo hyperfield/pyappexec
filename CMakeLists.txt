@@ -8,6 +8,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
 
 add_compile_definitions(BOOST_PROCESS_VERSION=1)
 
@@ -46,8 +47,14 @@ set(SOURCES
     gui/MainWindow.cpp
     gui/GuiRunner.cpp
     include/gui/MainWindow.hpp
+    resources/qt_resources.qrc
     ${GENERATED_RESOURCE_C}
 )
+
+if (WIN32)
+    configure_file(${CMAKE_SOURCE_DIR}/resources/win/appicon.rc.in ${CMAKE_BINARY_DIR}/appicon.rc @ONLY)
+    list(APPEND SOURCES ${CMAKE_BINARY_DIR}/appicon.rc)
+endif()
 
 add_executable(pyappexec ${SOURCES})
 

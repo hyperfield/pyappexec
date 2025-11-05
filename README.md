@@ -1,5 +1,9 @@
 # PyAppExec
 
+<div align="center">
+  <img src="docs/logo-256.png" alt="PyAppExec logo" width="128" height="128">
+</div>
+
 PyAppExec is a cross-platform bootstrapper that prepares a Python application for end users. It locates (or installs) a suitable Python interpreter, provisions an isolated virtual environment, downloads any third-party tooling you bundle, installs Python dependencies, and finally launches your target script - all driven by a simple `.ini` file specification.
 
 - [Overview](#overview)
