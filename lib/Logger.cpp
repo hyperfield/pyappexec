@@ -1,6 +1,7 @@
 #include "Logger.hpp"
 
 #include <algorithm>
+#include <unordered_map>
 #include <spdlog/sinks/null_sink.h>
 // cppcheck-suppress missingIncludeSystem
 #include <spdlog/sinks/stdout_color_sinks.h>
@@ -43,24 +44,26 @@ void configure(bool enableConsole, spdlog::level::level_enum level)
 
 spdlog::level::level_enum levelFromString(const std::string& value)
 {
-    if (value.empty()) {
-        return spdlog::level::info;
-    }
+    static const std::unordered_map<std::string, spdlog::level::level_enum> kLevelMap = {
+        {"trace", spdlog::level::trace},
+        {"debug", spdlog::level::debug},
+        {"info", spdlog::level::info},
+        {"warn", spdlog::level::warn},
+        {"warning", spdlog::level::warn},
+        {"error", spdlog::level::err},
+        {"critical", spdlog::level::critical},
+        {"fatal", spdlog::level::critical},
+        {"off", spdlog::level::off},
+        {"none", spdlog::level::off}
+    };
 
     std::string lowered = value;
     std::transform(lowered.begin(), lowered.end(), lowered.begin(), [](unsigned char c) {
         return static_cast<char>(std::tolower(c));
     });
 
-    if (lowered == "trace") return spdlog::level::trace;
-    if (lowered == "debug") return spdlog::level::debug;
-    if (lowered == "info") return spdlog::level::info;
-    if (lowered == "warn" || lowered == "warning") return spdlog::level::warn;
-    if (lowered == "error") return spdlog::level::err;
-    if (lowered == "critical" || lowered == "fatal") return spdlog::level::critical;
-    if (lowered == "off" || lowered == "none") return spdlog::level::off;
-
-    return spdlog::level::info;
+    auto it = kLevelMap.find(lowered);
+    return it != kLevelMap.end() ? it->second : spdlog::level::info;
 }
 
 } // namespace Logger

@@ -1,1 +1,0 @@
-glib-compile-resources --target=resources.c --generate-source resources.xml
