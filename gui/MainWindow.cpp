@@ -149,13 +149,6 @@ void MainWindow::handleProcessFinished(int exitCode, QProcess::ExitStatus status
 
     if (completedSuccessfully_) {
         statusLabel_->setText(tr("Status: completed successfully"));
-        appendOutput(tr("[info] %1 finished successfully.\n").arg(appDisplayName_), false);
-        appendOutput(tr("[info] Bootstrapped by %1 %2 (%3). Project: %4\n")
-                         .arg(QString::fromUtf8(AppMetadata::kAppName.data()),
-                              QString::fromUtf8(AppMetadata::kVersion.data()),
-                              QString::fromUtf8(AppMetadata::kYears.data()),
-                              QString::fromUtf8(AppMetadata::kGithub.data())),
-                     false);
         suppressCheckBox_->setEnabled(true);
     } else {
         statusLabel_->setText(tr("Status: failed (exit code %1)").arg(exitCode));

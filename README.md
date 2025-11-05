@@ -67,7 +67,6 @@ While PyInstaller, cx_Freeze and similar tools are excellent when you need a com
 ├── gui/                    # Qt6 widgets for the optional front-end (MainWindow, GuiRunner)
 ├── resources/              # GLib resource manifest plus embedded Python helper scripts
 ├── scripts/                # Source copies of the embedded helper scripts
-├── test2/                  # Sample Python application (ships with its own pyappexec.ini)
 ├── LICENSE / README.md     # Project metadata and documentation
 ```
 

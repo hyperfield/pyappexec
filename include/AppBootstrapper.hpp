@@ -10,9 +10,13 @@
 
 
 struct Requirement {
+    // cppcheck-suppress unusedStructMember
     std::string name;
+    // cppcheck-suppress unusedStructMember
     std::string url;
+    // cppcheck-suppress unusedStructMember
     std::string file_name;
+    // cppcheck-suppress unusedStructMember
     std::string cmd_params;
     std::string version_check_command;
     // cppcheck-suppress unusedStructMember

@@ -38,6 +38,10 @@ set_source_files_properties(${GENERATED_RESOURCE_C} PROPERTIES GENERATED TRUE)
 
 set(SOURCES
     main.cpp
+    lib/CliParser.cpp
+    lib/ConfigLoader.cpp
+    lib/Launcher.cpp
+    lib/LoggerConfigurator.cpp
     lib/INIReader.cpp
     lib/AppBootstrapper.cpp
     lib/PythonManager.cpp
