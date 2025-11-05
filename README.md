@@ -26,6 +26,8 @@ PyAppExec is a cross-platform bootstrapper that prepares a Python application fo
 
 Many Python applications require users to install Python, set up virtual environments, download extra outside dependencies, and install Python packages before they can run the app. PyAppExec automates those steps so you can distribute a native binary launcher alongside your Python project. Ship the PyAppExec binary, ship an `.ini` configuration that describes what the launcher should do, and PyAppExec takes care of the rest.
 
+While PyInstaller, cx_Freeze and similar tools are excellent when you need a completely self-contained binary, PyAppExec deliberately lightens the shipped package, relegating the heavier dependency downloads to the end user’s machine during the first run. Unlike these “freezer” tools that bundle an entire Python runtime and all dependencies into a monolithic executable, PyAppExec keeps your Python project intact and simply orchestrates interpreter provisioning, virtual environments, and external tooling on the user’s machine. That makes updates faster (swap out your Python sources without rebuilding a frozen binary), reduces download size, and keeps the runtime transparent for power users who still want to inspect or modify the Python code.
+
 ## Key Features
 
 - Detects the highest priority Python interpreter on the PATH and validates its version.
@@ -61,7 +63,7 @@ Many Python applications require users to install Python, set up virtual environ
 ├── gui/                    # Qt6 widgets for the optional front-end (MainWindow, GuiRunner)
 ├── resources/              # GLib resource manifest plus embedded Python helper scripts
 ├── scripts/                # Source copies of the embedded helper scripts
-├── pyappexec.ini           # Example configuration that targets the sample app (to be placed in a runnable Python app's directory)
+├── test2/                  # Sample Python application (ships with its own pyappexec.ini)
 ├── LICENSE / README.md     # Project metadata and documentation
 ```
 
@@ -105,10 +107,17 @@ PyAppExec first looks for `pyappexec.ini` in the current directory; if it is not
 - `--config /path/to/pyappexec.ini` – override the config discovery logic described above.
 - `--no-gui` – force CLI mode even when the INI requests the Qt front-end.
 - `--reset-gui` – clear the persisted "hide GUI" preference (handy if you previously suppressed the GUI after a successful run).
+- `--help` – print a brief overview of PyAppExec and the available flags.
+
+### Quick start (bundling your Python app)
+
+1. Copy your built `pyappexec` binary and a tailored `pyappexec.ini` into the root of the Python application you plan to ship (the repo’s `test2/pyappexec.ini` shows the recommended layout where every path is relative to the INI). Rename the binary to match your product if you like.
+2. Run the launcher once from that directory to ensure the virtual environment, `distrib/` downloads, and GUI suppression preference behave as expected. Remove any temporary `distrib/` artifacts you don’t plan to prebundle.
+3. Include a short README/release note in your distribution that states the app is bootstrapped by PyAppExec and links to https://github.com/quicknode-labs/PyAppExec for attribution and support.
 
 ### GUI mode
 
-Set `GUI = true` under the relevant `[<OS>:main]` section to launch the Qt6 front-end. The GUI embeds the CLI output (PowerShell on Windows, Terminal on macOS/Linux), shows a progress indicator, and surfaces blocking error dialogs if anything fails. When a run completes successfully you can check “Hide GUI after successful runs” before closing the window; PyAppExec will remember that preference (per app) and skip the GUI going forward, automatically re-enabling it if a later run fails. Pass `--no-gui` on the command line or set `GUI = false` to force the traditional CLI experience even when the INI enables the GUI. Use `--config /path/to/pyappexec.ini` to point the launcher at a specific configuration file, and `--reset-gui` to clear any saved GUI suppression preference.
+Set `GUI = true` under the relevant `[<OS>:main]` section to launch the Qt6 front-end. The GUI embeds the CLI output (PowerShell on Windows, Terminal on macOS/Linux), shows a progress indicator, and surfaces blocking error dialogs if anything fails. The window title automatically displays your Python app name followed by “(via PyAppExec)” so end users can immediately see that PyAppExec is handling the bootstrap. When a run completes successfully you can check “Hide GUI after successful runs” before closing the window; PyAppExec remembers that preference (per app) and skips the GUI going forward, automatically re-enabling it if a later run fails. The Help menu also exposes “About PyAppExec” and “About Qt” dialogs for attribution. Pass `--no-gui` on the command line or set `GUI = false` to force the traditional CLI experience even when the INI enables the GUI. Use `--config /path/to/pyappexec.ini` to point the launcher at a specific configuration file, and `--reset-gui` to clear any saved GUI suppression preference.
 
 ## Configuration
 
