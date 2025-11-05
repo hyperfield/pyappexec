@@ -147,7 +147,7 @@ void MainWindow::handleProcessFinished(int exitCode, QProcess::ExitStatus status
 
     if (completedSuccessfully_) {
         statusLabel_->setText(tr("Status: completed successfully"));
-        QMessageBox::information(this, appDisplayName_, tr("%1 finished successfully.").arg(appDisplayName_));
+        appendOutput(tr("[info] %1 finished successfully.\n").arg(appDisplayName_), false);
         suppressCheckBox_->setEnabled(true);
     } else {
         statusLabel_->setText(tr("Status: failed (exit code %1)").arg(exitCode));
