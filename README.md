@@ -116,6 +116,8 @@ The build step generates `resources.c` from `resources/resources.xml` using `gli
 
 > **macOS workflow:** Install the dependencies via `brew install glib libffi zlib boost qt spdlog` (Boost supplies `<boost/process.hpp>` and Qt6 supplies the GUI). Homebrew's `pkg-config` should expose `gio-2.0` after those installs; if it does not, export `PKG_CONFIG_PATH="/opt/homebrew/opt/libffi/lib/pkgconfig:/opt/homebrew/lib/pkgconfig:/opt/homebrew/share/pkgconfig:$PKG_CONFIG_PATH"` (adjust the prefixes if needed) and rerun `pkg-config --modversion gio-2.0` to confirm it resolves to the Homebrew install. You can run `scripts/build_macos.sh` to apply the environment tweaks automatically and execute `cmake -S … && cmake --build …` in one step.
 
+Use `-DBUILD_LAUNCHER=OFF` or `-DBUILD_INSTALLER=OFF` to selectively build the CLI/GUI launcher or the installer UI.
+
 ### Run
 
 After building, run the launcher from the project root:
@@ -132,6 +134,15 @@ PyAppExec first looks for `pyappexec.ini` in the current directory; if it is not
 - `--no-gui` – force CLI mode even when the INI requests the Qt front-end.
 - `--reset-gui` – clear the persisted "hide GUI" preference (handy if you previously suppressed the GUI after a successful run).
 - `--help` – print a brief overview of PyAppExec and the available flags.
+
+### PyAppExec Installer
+
+PyAppExec ships with an optional Qt-based installer that can scaffold a launcher/INI for an existing Python project. Build it via `cmake --build build --target pyappexec_installer` (or leave `-DBUILD_INSTALLER=ON`, which is the default). The installer allows you to:
+
+- Browse to a Python project root and auto-detect the entry point and requirements file.
+- Pick an application name and the name of the copied launcher binary (the PyAppExec executable is copied and renamed accordingly).
+- Generate a starter `pyappexec.ini` for Linux/Windows/macOS with the common defaults (including the “hide GUI after successful runs” flag).
+- Open the generated INI in your default editor so you can tweak paths before shipping.
 
 ### Quick start (bundling your Python app)
 
@@ -312,7 +323,7 @@ This project is released under the [MIT License](LICENSE).
 
 PyAppExec builds on the excellent work of the open-source community:
 
-- [Qt 6](https://www.qt.io/) for the optional GUI front-end.
+- [Qt 6](https://www.qt.io/) for powering both the launcher and installer UIs.
 - [Boost.Process](https://www.boost.org/doc/libs/release/doc/html/process.html) for portable process management.
 - [GLib/GIO](https://docs.gtk.org/gio/) for resource embedding and cross-platform file utilities.
 - [spdlog](https://github.com/gabime/spdlog) for fast structured logging.

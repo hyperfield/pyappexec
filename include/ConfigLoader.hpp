@@ -8,7 +8,7 @@
 class ConfigLoader
 {
 public:
-    explicit ConfigLoader(const CliOptions& options);
+    ConfigLoader(const CliOptions& options, const std::filesystem::path& binaryDir);
 
     SpecConfig load();
     const std::filesystem::path& configPath() const { return configPath_; }
@@ -21,6 +21,7 @@ private:
     std::filesystem::path resolveConfigPath(const std::optional<std::string>& overridePath) const;
 
     CliOptions options_;
+    std::filesystem::path binaryDir_;
     std::filesystem::path configPath_;
 };
 

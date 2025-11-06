@@ -5,7 +5,8 @@
 #include <filesystem>
 #include <stdexcept>
 
-ConfigLoader::ConfigLoader(const CliOptions& options) : options_(options) {}
+ConfigLoader::ConfigLoader(const CliOptions& options, const std::filesystem::path& binaryDir)
+    : options_(options), binaryDir_(binaryDir) {}
 
 SpecConfig ConfigLoader::load()
 {
@@ -29,19 +30,30 @@ std::filesystem::path ConfigLoader::resolveConfigPath(const std::optional<std::s
         return explicitPath;
     }
 
-    fs::path cwd = fs::current_path();
-    fs::path primary = cwd / "pyappexec.ini";
-    if (fs::exists(primary)) {
-        return primary;
+    auto searchDir = [](const fs::path& dir) -> std::optional<fs::path> {
+        fs::path primary = dir / "pyappexec.ini";
+        if (fs::exists(primary)) {
+            return primary;
+        }
+        for (const auto& entry : fs::directory_iterator(dir)) {
+            if (!entry.is_directory()) {
+                continue;
+            }
+            fs::path candidate = entry.path() / "pyappexec.ini";
+            if (fs::exists(candidate)) {
+                return candidate;
+            }
+        }
+        return std::nullopt;
+    };
+
+    if (auto fromCwd = searchDir(fs::current_path())) {
+        return *fromCwd;
     }
 
-    for (const auto& entry : fs::directory_iterator(cwd)) {
-        if (!entry.is_directory()) {
-            continue;
-        }
-        fs::path candidate = entry.path() / "pyappexec.ini";
-        if (fs::exists(candidate)) {
-            return candidate;
+    if (!binaryDir_.empty()) {
+        if (auto fromBinary = searchDir(binaryDir_)) {
+            return *fromBinary;
         }
     }
 

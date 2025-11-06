@@ -11,11 +11,17 @@ int main(int argc, char** argv)
 {
     CliParser parser(argc, argv);
     CliOptions options = parser.parse();
+    std::filesystem::path binaryDir;
+    try {
+        binaryDir = std::filesystem::canonical(argv[0]).parent_path();
+    } catch (const std::exception&) {
+        binaryDir = std::filesystem::current_path();
+    }
 
     Logger::initialize();
 
     try {
-        ConfigLoader loader(options);
+        ConfigLoader loader(options, binaryDir);
         SpecConfig specConfig = loader.load();
         LoggerConfigurator(specConfig).apply();
 
