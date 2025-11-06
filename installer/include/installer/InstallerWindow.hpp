@@ -22,6 +22,8 @@ public:
 private slots:
     void browseForProject();
     void handleInstall();
+    void showAboutInstaller();
+    void showAboutQtDialog();
 
 private:
     void refreshInspection();

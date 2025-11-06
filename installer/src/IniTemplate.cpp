@@ -30,13 +30,25 @@ QString IniTemplate::generate(const SettingsModel& settings, const InspectionRes
             .arg(settings.hideGuiAfterSuccess ? QStringLiteral("false") : QStringLiteral("true"));
     };
 
+    const QString requirementStub = QStringLiteral(
+        "requirement_1 = \n"
+        "requirement_1_url = \n"
+        "requirement_1_file_name = \n"
+        "requirement_1_cmd_params = \n"
+        "requirement_1_version_check_command = \n"
+        "requirement_1_version_regex = \n"
+        "requirement_1_min_version = \n"
+        "requirement_1_launch_file = \n"
+        "requirement_1_capture_stderr = \n"
+        "requirement_1_install_command = \n");
+
     QString ini;
     ini += platformBlock(QStringLiteral("Linux"));
-    ini += QStringLiteral("[Linux:requirements]\n\n");
+    ini += QStringLiteral("[Linux:requirements]\n") + requirementStub + QStringLiteral("\n");
     ini += platformBlock(QStringLiteral("Windows"));
-    ini += QStringLiteral("[Windows:requirements]\n\n");
+    ini += QStringLiteral("[Windows:requirements]\n") + requirementStub + QStringLiteral("\n");
     ini += platformBlock(QStringLiteral("MacOS"));
-    ini += QStringLiteral("[MacOS:requirements]\n\n");
+    ini += QStringLiteral("[MacOS:requirements]\n") + requirementStub + QStringLiteral("\n");
     return ini;
 }
 

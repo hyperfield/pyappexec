@@ -10,6 +10,8 @@
 #include <QFileDialog>
 #include <QLineEdit>
 #include <QMessageBox>
+#include <QMenu>
+#include <QMenuBar>
 #include <QPushButton>
 #include <QTextEdit>
 #include <QVBoxLayout>
@@ -21,6 +23,19 @@ InstallerWindow::InstallerWindow(QWidget* parent) : QMainWindow(parent)
 {
     setWindowTitle(QStringLiteral("PyAppExec Installer %1").arg(QString::fromUtf8(AppMetadata::kVersion.data())));
     resize(600, 480);
+
+    QMenu* helpMenu = nullptr;
+#if defined(Q_OS_MAC)
+    helpMenu = menuBar()->addMenu(tr("Help"));
+#else
+    helpMenu = menuBar()->addMenu(tr("&Help"));
+#endif
+    auto* aboutAction = helpMenu->addAction(tr("About PyAppExec Installer"));
+    aboutAction->setMenuRole(QAction::NoRole);
+    connect(aboutAction, &QAction::triggered, this, &InstallerWindow::showAboutInstaller);
+    auto* aboutQtAction = helpMenu->addAction(tr("About Qt"));
+    aboutQtAction->setMenuRole(QAction::NoRole);
+    connect(aboutQtAction, &QAction::triggered, this, &InstallerWindow::showAboutQtDialog);
 
     auto* central = new QWidget(this);
     auto* layout = new QVBoxLayout(central);
@@ -45,7 +60,8 @@ InstallerWindow::InstallerWindow(QWidget* parent) : QMainWindow(parent)
     layout->addWidget(hideGuiCheck_);
 
     installButton_ = new QPushButton(tr("Install PyAppExec"), central);
-    layout->addWidget(installButton_);
+    installButton_->setFixedWidth(220);
+    layout->addWidget(installButton_, 0, Qt::AlignHCenter);
     connect(installButton_, &QPushButton::clicked, this, &InstallerWindow::handleInstall);
 
     logView_ = new QTextEdit(central);
@@ -124,6 +140,34 @@ void InstallerWindow::logMessage(const QString& message)
     if (!message.isEmpty()) {
         logView_->append(message);
     }
+}
+
+void InstallerWindow::showAboutInstaller()
+{
+    const QString body = tr(
+        "<b>PyAppExec Installer</b><br><br>"
+        "Version: %1<br>"
+        "Author: %2<br>"
+        "License: %3<br>"
+        "Github: <a href=\"%4\">%4</a><br>"
+        "Years: %5")
+        .arg(QString::fromUtf8(AppMetadata::kVersion.data()),
+             QString::fromUtf8(AppMetadata::kAuthor.data()),
+             QString::fromUtf8(AppMetadata::kLicense.data()),
+             QString::fromUtf8(AppMetadata::kGithub.data()),
+             QString::fromUtf8(AppMetadata::kYears.data()));
+
+    QMessageBox box(this);
+    box.setWindowTitle(tr("About PyAppExec Installer"));
+    box.setText(body);
+    box.setTextFormat(Qt::RichText);
+    box.setStandardButtons(QMessageBox::Ok);
+    box.exec();
+}
+
+void InstallerWindow::showAboutQtDialog()
+{
+    QMessageBox::aboutQt(this);
 }
 
 } // namespace installer

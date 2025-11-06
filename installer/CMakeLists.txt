@@ -12,6 +12,7 @@ set(INSTALLER_SOURCES
 )
 
 add_executable(pyappexec_installer ${INSTALLER_SOURCES})
+set_common_runtime_output(pyappexec_installer)
 
 target_include_directories(pyappexec_installer
     PRIVATE

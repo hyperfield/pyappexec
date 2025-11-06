@@ -15,6 +15,24 @@ set(CMAKE_AUTORCC ON)
 
 add_compile_definitions(BOOST_PROCESS_VERSION=1)
 
+function(set_common_runtime_output target_name)
+    if(NOT TARGET ${target_name})
+        return()
+    endif()
+    if(CMAKE_CONFIGURATION_TYPES)
+        foreach(config ${CMAKE_CONFIGURATION_TYPES})
+            string(TOUPPER "${config}" CONFIG_UPPER)
+            set_target_properties(${target_name}
+                PROPERTIES
+                    "RUNTIME_OUTPUT_DIRECTORY_${CONFIG_UPPER}" "${CMAKE_BINARY_DIR}/${config}")
+        endforeach()
+    else()
+        set_target_properties(${target_name}
+            PROPERTIES
+                RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+    endif()
+endfunction()
+
 if(BUILD_LAUNCHER OR BUILD_INSTALLER)
     find_package(Qt6 COMPONENTS Widgets REQUIRED)
 endif()
@@ -71,6 +89,7 @@ if(BUILD_LAUNCHER)
     endif()
 
     add_executable(pyappexec ${SOURCES})
+    set_common_runtime_output(pyappexec)
 
     target_include_directories(pyappexec
         PRIVATE
