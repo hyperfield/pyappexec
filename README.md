@@ -28,7 +28,7 @@ PyAppExec is a cross-platform bootstrapper that prepares a Python application fo
 
 ## Overview
 
-Many Python applications require users to install Python, set up virtual environments, download extra outside dependencies, and install Python packages before they can run the app. PyAppExec automates those steps so you can distribute a native binary launcher alongside your Python project. Ship the PyAppExec binary, ship an `.ini` configuration that describes what the launcher should do, and PyAppExec takes care of the rest.
+Many Python applications require users to install Python, set up virtual environments, download extra outside dependencies, and install Python packages before they can run the app. PyApp   automates those steps so you can distribute a native binary launcher alongside your Python project. Ship the PyAppExec binary, ship an `.ini` configuration that describes what the launcher should do, and PyAppExec takes care of the rest.
 
 While PyInstaller, cx_Freeze and similar tools are excellent when you need a completely self-contained binary, PyAppExec deliberately lightens the shipped package, relegating the heavier dependency downloads to the end user’s machine during the first run. Unlike these “freezer” tools that bundle an entire Python runtime and all dependencies into a monolithic executable, PyAppExec keeps your Python project intact and simply orchestrates interpreter provisioning, virtual environments, and external tooling on the user’s machine. That makes updates faster (swap out your Python sources without rebuilding a frozen binary), reduces download size, and keeps the runtime transparent for power users who still want to inspect or modify the Python code.
 
