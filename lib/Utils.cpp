@@ -31,7 +31,9 @@
     // cppcheck-suppress missingIncludeSystem
     #include <windows.h>
     #include <urlmon.h>
+    #include <wininet.h>
     #pragma comment(lib, "urlmon.lib")
+    #pragma comment(lib, "wininet.lib")
 #endif
 
 #ifdef _WIN32
