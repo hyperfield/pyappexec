@@ -2,6 +2,7 @@
 #include "Utils.hpp"
 #include <algorithm>
 #include <cctype>
+#include <cstdlib>
 #include <iostream>
 #include <iterator>
 #include <regex>
@@ -94,11 +95,27 @@ std::string PythonManager::resolvePythonCommand()
     }
 
     std::vector<std::string> candidates;
-#ifdef _WIN32
-    candidates = {"py", "python3", "python"};
-#else
-    candidates = {"python3", "python"};
+    if (const char* overrideCmd = std::getenv("PYAPPEXEC_PYTHON")) {
+        if (overrideCmd[0] != '\0') {
+            candidates.emplace_back(overrideCmd);
+        }
+    }
+
+#if defined(__APPLE__)
+    const std::vector<std::string> macPaths = {
+        "/opt/homebrew/bin/python3",
+        "/usr/local/bin/python3",
+        "/Library/Frameworks/Python.framework/Versions/Current/bin/python3"
+    };
+    candidates.insert(candidates.end(), macPaths.begin(), macPaths.end());
 #endif
+
+#ifdef _WIN32
+    const std::vector<std::string> defaultCandidates = {"py", "python3", "python"};
+#else
+    const std::vector<std::string> defaultCandidates = {"python3", "python"};
+#endif
+    candidates.insert(candidates.end(), defaultCandidates.begin(), defaultCandidates.end());
 
     for (const auto& candidate : candidates) {
         try {

@@ -8,11 +8,13 @@
 #include <QCheckBox>
 #include <QDesktopServices>
 #include <QFileDialog>
+#include <QFileInfo>
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QMenu>
 #include <QMenuBar>
 #include <QPushButton>
+#include <QPixmap>
 #include <QTextEdit>
 #include <QVBoxLayout>
 #include <QUrl>
@@ -56,6 +58,13 @@ InstallerWindow::InstallerWindow(QWidget* parent) : QMainWindow(parent)
     exeRow.browseButton->hide();
     layout->addWidget(exeRow.container);
 
+#if defined(Q_OS_MAC)
+    BrowseRow iconRow = createBrowseRow(tr("App icon (PNG/ICNS):"), central);
+    iconPathEdit_ = iconRow.lineEdit;
+    layout->addWidget(iconRow.container);
+    connect(iconRow.browseButton, &QPushButton::clicked, this, &InstallerWindow::browseForIcon);
+#endif
+
     hideGuiCheck_ = new QCheckBox(tr("Hide GUI after successful runs"), central);
     layout->addWidget(hideGuiCheck_);
 
@@ -81,6 +90,25 @@ void InstallerWindow::browseForProject()
     refreshInspection();
 }
 
+void InstallerWindow::browseForIcon()
+{
+#if defined(Q_OS_MAC)
+    if (!iconPathEdit_) {
+        return;
+    }
+    const QString file = QFileDialog::getOpenFileName(
+        this,
+        tr("Select application icon"),
+        QString(),
+        tr("Icon files (*.icns *.png *.jpg *.jpeg *.bmp)"));
+    if (!file.isEmpty()) {
+        iconPathEdit_->setText(file);
+    }
+#else
+    Q_UNUSED(this);
+#endif
+}
+
 void InstallerWindow::refreshInspection()
 {
     lastInspection_ = inspector_.inspect(projectPathEdit_->text());
@@ -104,6 +132,9 @@ SettingsModel InstallerWindow::gatherSettings() const
     settings.projectPath = projectPathEdit_->text().trimmed();
     settings.appName = appNameEdit_->text().trimmed();
     settings.executableName = executableNameEdit_->text().trimmed();
+    if (iconPathEdit_) {
+        settings.iconPath = iconPathEdit_->text().trimmed();
+    }
     settings.hideGuiAfterSuccess = hideGuiCheck_->isChecked();
     return settings;
 }
@@ -115,6 +146,14 @@ void InstallerWindow::handleInstall()
         QMessageBox::warning(this, tr("Missing information"), tr("Select a Python project directory."));
         return;
     }
+#if defined(Q_OS_MAC)
+    if (!settings.iconPath.isEmpty() && !QFileInfo::exists(settings.iconPath)) {
+        QMessageBox::warning(this,
+                             tr("Invalid icon"),
+                             tr("The selected icon path does not exist. Please pick a valid file or leave the field blank."));
+        return;
+    }
+#endif
 
     InspectionResult inspection = inspector_.inspect(settings.projectPath);
     IniTemplate iniTemplate;
@@ -129,7 +168,7 @@ void InstallerWindow::handleInstall()
     }
 
     logMessage(tr("Generated %1").arg(createdIni));
-    logMessage(tr("Copied launcher as %1").arg(settings.executableFileName()));
+    logMessage(tr("Copied launcher as %1").arg(settings.launcherArtifactName()));
 
     QDesktopServices::openUrl(QUrl::fromLocalFile(createdIni));
     QMessageBox::information(this, tr("Success"), tr("PyAppExec was installed for %1").arg(settings.appName));
@@ -162,6 +201,9 @@ void InstallerWindow::showAboutInstaller()
     box.setText(body);
     box.setTextFormat(Qt::RichText);
     box.setStandardButtons(QMessageBox::Ok);
+    if (QPixmap logo(QStringLiteral(":/net/quicknode/pyappexec/logo_transparent.png")); !logo.isNull()) {
+        box.setIconPixmap(logo.scaled(96, 96, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+    }
     box.exec();
 }
 

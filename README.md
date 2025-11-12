@@ -4,7 +4,7 @@
   <img src="docs/logo-256.png" alt="PyAppExec logo" width="128" height="128">
 </div>
 
-PyAppExec is a cross-platform bootstrapper that prepares a Python application for end users. It locates (or installs) a suitable Python interpreter, provisions an isolated virtual environment, downloads any third-party tooling you bundle, installs Python dependencies, and finally launches your target script - all driven by a simple `.ini` file specification.
+PyAppExec is a cross-platform bootstrapper that prepares a Python application for end users. It locates (or installs) a suitable Python interpreter, provisions an isolated virtual environment, downloads any third-party tooling you bundle, installs Python dependencies, and finally launches your target script - all driven by a simple `.ini` file specification. For a friendlier setup flow, PyAppExec ships a companion installer with a graphical interface that auto-detects your project layout, copies the launcher into place, generates a tailored `.ini` you can fine-tune, and produces ready-to-ship launcher folders for Windows/Linux or a branded `.app` bundle with your icon on macOS.
 
 - [Overview](#overview)
 - [Key Features](#key-features)
@@ -42,7 +42,8 @@ While PyInstaller, cx_Freeze and similar tools are excellent when you need a com
 - Downloads and, when possible, installs external tools, using integrity checks to avoid re-downloading unchanged files.
 - Launches the target Python entry point after the environment is ready, with stdout/stderr feedback in the terminal.
 - Accepts optional command-line arguments and environment overrides from the `.ini`.
-- Ships with an optional Qt6 front-end that surfaces progress, embedded terminal output, and error dialogs.
+- Ships with an optional GUI front-end that surfaces progress, embedded terminal output, and error dialogs.
+- Includes a GUI installer plus packaging script that auto-detects project structure, generates a starter `.ini` for you to customize, and produces ready-to-share artifacts (launcher folders for Windows/Linux and a branded `.app` on macOS).
 - Emits structured logs via `spdlog` so you can tail progress or integrate with external log collectors.
 - Embeds helper Python scripts via GLib resources so the launcher has zero runtime script dependencies.
 
@@ -109,7 +110,7 @@ On Linux, install the toolchain and development headers via your package manager
 
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build
+cmake --build build --parallel
 ```
 
 The build step generates `resources.c` from `resources/resources.xml` using `glib-compile-resources`. Ensure that tool is discoverable on your `PATH`.
@@ -128,6 +129,8 @@ After building, run the launcher from the project root:
 
 PyAppExec first looks for `pyappexec.ini` in the current directory; if it is not found, it scans each immediate subdirectory (this is how the sample config in `test2/pyappexec.ini` is discovered). To point at a specific file explicitly, pass `--config /path/to/pyappexec.ini`.
 
+On macOS, if you distribute PyAppExec inside an `.app` bundle, launch flags (for example `--reset-gui`) only work when you either run the embedded binary directly (`Your.app/Contents/MacOS/YourBinary --reset-gui`) or insert `--args` when using Finder/`open` (`open Your.app --args --reset-gui`). Anything after the `.app` path without `--args` is treated as a document, so PyAppExec never sees the flag.
+
 **Useful flags**
 
 - `--config /path/to/pyappexec.ini` – override the config discovery logic described above.
@@ -137,12 +140,18 @@ PyAppExec first looks for `pyappexec.ini` in the current directory; if it is not
 
 ### PyAppExec Installer
 
-PyAppExec ships with an optional Qt-based installer that can scaffold a launcher/INI for an existing Python project. Build it via `cmake --build build --target pyappexec_installer` (or leave `-DBUILD_INSTALLER=ON`, which is the default). The installer allows you to:
+PyAppExec ships with an optional Qt-based installer that can scaffold a launcher/INI for an existing Python project. Build it via `cmake --build build --parallel --target pyappexec_installer` (or leave `-DBUILD_INSTALLER=ON`, which is the default). The installer allows you to:
 
 - Browse to a Python project root and auto-detect the entry point and requirements file.
 - Pick an application name and the name of the copied launcher binary (the PyAppExec executable is copied and renamed accordingly).
+- On macOS, optionally provide a high-resolution PNG/ICNS icon (otherwise the default PyAppExec icon is used) and the installer will bake it into the generated `.app` bundle.
 - Generate a starter `pyappexec.ini` for Linux/Windows/macOS with the common defaults (including the “hide GUI after successful runs” flag).
-- Open the generated INI in your default editor so you can tweak paths before shipping.
+- Open the generated INI in your default editor so you can tweak paths before shipping (the installer simply provides a solid baseline).
+
+**Packaging the installer as a macOS `.app`**
+
+- Run `./scripts/package_installer_app.sh` to produce `dist/PyAppExec_Installer.<version>.<arch>.app`. The script rebuilds the installer binary, converts the iconset under `resources/icons/macos/`, copies Qt frameworks/plugins via `macdeployqt`, and performs an ad-hoc `codesign` so the bundle launches without Gatekeeper warnings. Set `CODESIGN_IDENTITY` if you need to sign with a real certificate.
+- Distribute `PyAppExec_Installer…app` directly to customers. When they launch it, they can browse to their Python project, (optionally) supply an icon, and the installer will drop the PyAppExec launcher + `pyappexec.ini` alongside the project, ready for redistribution on Linux, Windows, or macOS.
 
 ### Quick start (bundling your Python app)
 
@@ -306,7 +315,7 @@ The test scripts live under `tests/` and can be extended as the project grows.
 
 ## Troubleshooting
 
-- **Python not detected**: Confirm that a compatible interpreter is available on the `PATH`. On Linux, check the console logs to see if PyAppExec attempted package-manager installation.
+- **Python not detected**: Confirm that a compatible interpreter is available on the `PATH`. On macOS, apps launched from Finder inherit the default `/usr/bin:/bin:/usr/sbin:/sbin` `PATH`, so PyAppExec now probes `/opt/homebrew/bin/python3`, `/usr/local/bin/python3`, and `/Library/Frameworks/Python.framework/Versions/Current/bin/python3` automatically; you can also export `PYAPPEXEC_PYTHON=/absolute/path/to/python3` before starting the launcher (or wrap your `.app` with that environment) to force a specific interpreter. On Linux, check the console logs to see if PyAppExec attempted package-manager installation.
 - **`glib-compile-resources` missing**: Install the GLib development tools package (`libglib2.0-dev-bin` on Debian/Ubuntu, `glib2` on Arch, `brew install glib` on macOS).
 - **External requirement download fails**: Verify the URL, ensure HTTPS certificates are trusted, and check that the host is reachable in your deployment environment.
 - **Virtual environment issues**: Remove the existing virtual environment directory (for example `test/.pyappexec-venv`) and rerun the launcher to force a clean setup.

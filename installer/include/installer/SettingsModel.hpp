@@ -10,9 +10,17 @@ struct SettingsModel
     QString projectPath;
     QString appName;
     QString executableName;
+    QString iconPath;
     bool hideGuiAfterSuccess{false};
 
     QString executableFileName() const;
+    QString launcherArtifactName() const;
+#ifdef Q_OS_MAC
+    QString bundleName() const;
+#endif
+
+private:
+    QString normalizedExecutableStem() const;
 };
 
 } // namespace installer

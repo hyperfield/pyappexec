@@ -1,11 +1,20 @@
 #include "installer/BinaryPackager.hpp"
 
+#include "AppMetadata.hpp"
+#include <array>
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QTextStream>
 #include <QObject>
+#ifdef Q_OS_MAC
+#include <QChar>
+#include <QImage>
+#include <QProcess>
+#include <QStandardPaths>
+#include <QTemporaryDir>
+#endif
 #ifdef Q_OS_WIN
 #include <windows.h>
 #endif
@@ -28,6 +37,247 @@ QString launcherSourcePath()
     }
     return {};
 }
+
+#ifdef Q_OS_MAC
+QString sanitizeIdentifierFragment(const QString& value)
+{
+    QString fragment;
+    fragment.reserve(value.size());
+    for (QChar ch : value) {
+        if (ch.isLetterOrNumber()) {
+            fragment.append(ch.toLower());
+        }
+    }
+    if (fragment.isEmpty()) {
+        fragment = QStringLiteral("pyappexecapp");
+    } else if (!fragment.at(0).isLetter()) {
+        fragment.prepend(QStringLiteral("a"));
+    }
+    return fragment;
+}
+
+bool writeInfoPlist(const QString& contentsPath,
+                    const SettingsModel& settings,
+                    const QString& executableName,
+                    const QString& iconFileName,
+                    QString* errorMessage)
+{
+    QString displayName = settings.appName.trimmed();
+    if (displayName.isEmpty()) {
+        displayName = settings.executableName.trimmed();
+    }
+    if (displayName.isEmpty()) {
+        displayName = QStringLiteral("PyAppExec");
+    }
+
+    const QString identifier = QStringLiteral("com.pyappexec.%1")
+        .arg(sanitizeIdentifierFragment(displayName));
+    const QString version = QString::fromUtf8(AppMetadata::kVersion.data());
+    QString iconBlock;
+    if (!iconFileName.isEmpty()) {
+        iconBlock = QStringLiteral(
+            "  <key>CFBundleIconFile</key>\n"
+            "  <string>%1</string>\n").arg(iconFileName);
+    }
+
+    const QString plist = QStringLiteral(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+        "<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" "
+        "\"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n"
+        "<plist version=\"1.0\">\n"
+        "<dict>\n"
+        "  <key>CFBundleName</key>\n"
+        "  <string>%1</string>\n"
+        "  <key>CFBundleDisplayName</key>\n"
+        "  <string>%1</string>\n"
+        "  <key>CFBundleIdentifier</key>\n"
+        "  <string>%2</string>\n"
+        "  <key>CFBundleExecutable</key>\n"
+        "  <string>%3</string>\n"
+        "  <key>CFBundlePackageType</key>\n"
+        "  <string>APPL</string>\n"
+        "  <key>CFBundleVersion</key>\n"
+        "  <string>%4</string>\n"
+        "  <key>CFBundleShortVersionString</key>\n"
+        "  <string>%4</string>\n"
+        "  <key>LSMinimumSystemVersion</key>\n"
+        "  <string>11.0</string>\n"
+        "  <key>NSHighResolutionCapable</key>\n"
+        "  <true/>\n"
+        "%5"
+        "</dict>\n"
+        "</plist>\n")
+        .arg(displayName, identifier, executableName, version, iconBlock);
+
+    QFile plistFile(contentsPath + QStringLiteral("/Info.plist"));
+    if (!plistFile.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
+        if (errorMessage) {
+            *errorMessage = QObject::tr("Failed to write Info.plist inside bundle.");
+        }
+        return false;
+    }
+    plistFile.write(plist.toUtf8());
+    plistFile.close();
+
+    QFile pkgInfo(contentsPath + QStringLiteral("/PkgInfo"));
+    if (pkgInfo.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
+        pkgInfo.write("APPL????");
+        pkgInfo.close();
+    }
+
+    return true;
+}
+
+QString iconutilExecutable()
+{
+    const QString path = QStandardPaths::findExecutable(QStringLiteral("iconutil"));
+    return path;
+}
+
+bool generateIcnsFromImage(const QString& sourceImage,
+                           const QString& destinationIcns,
+                           QString* errorMessage)
+{
+    QImage image(sourceImage);
+    if (image.isNull()) {
+        if (errorMessage) {
+            *errorMessage = QObject::tr("Unable to load icon image: %1").arg(sourceImage);
+        }
+        return false;
+    }
+
+    QTemporaryDir tempDir;
+    if (!tempDir.isValid()) {
+        if (errorMessage) {
+            *errorMessage = QObject::tr("Failed to create a temporary directory for icon conversion.");
+        }
+        return false;
+    }
+
+    const QString iconsetPath = tempDir.path() + QStringLiteral("/icon.iconset");
+    QDir().mkpath(iconsetPath);
+
+    struct IconSpec {
+        QString name;
+        int size;
+    };
+    const std::array<IconSpec, 10> specs{{
+        {QStringLiteral("icon_16x16.png"), 16},
+        {QStringLiteral("icon_16x16@2x.png"), 32},
+        {QStringLiteral("icon_32x32.png"), 32},
+        {QStringLiteral("icon_32x32@2x.png"), 64},
+        {QStringLiteral("icon_128x128.png"), 128},
+        {QStringLiteral("icon_128x128@2x.png"), 256},
+        {QStringLiteral("icon_256x256.png"), 256},
+        {QStringLiteral("icon_256x256@2x.png"), 512},
+        {QStringLiteral("icon_512x512.png"), 512},
+        {QStringLiteral("icon_512x512@2x.png"), 1024},
+    }};
+
+    for (const auto& spec : specs) {
+        QImage scaled = image.scaled(spec.size, spec.size, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+        if (!scaled.save(iconsetPath + QLatin1Char('/') + spec.name, "PNG")) {
+            if (errorMessage) {
+                *errorMessage = QObject::tr("Failed to write %1 inside temporary iconset.").arg(spec.name);
+            }
+            return false;
+        }
+    }
+
+    const QString iconutilPath = iconutilExecutable();
+    if (iconutilPath.isEmpty()) {
+        if (errorMessage) {
+            *errorMessage = QObject::tr("Could not locate 'iconutil'. Install Xcode command-line tools to enable icon conversion.");
+        }
+        return false;
+    }
+
+    QProcess iconutil;
+    iconutil.start(iconutilPath, {
+        QStringLiteral("-c"),
+        QStringLiteral("icns"),
+        QStringLiteral("-o"),
+        destinationIcns,
+        iconsetPath
+    });
+    if (!iconutil.waitForFinished() || iconutil.exitStatus() != QProcess::NormalExit || iconutil.exitCode() != 0) {
+        if (errorMessage) {
+            QString stderrOut = QString::fromUtf8(iconutil.readAllStandardError());
+            if (stderrOut.isEmpty()) {
+                stderrOut = QString::fromUtf8(iconutil.readAllStandardOutput());
+            }
+            if (stderrOut.isEmpty()) {
+                stderrOut = QObject::tr("Unknown error.");
+            }
+            *errorMessage = QObject::tr("iconutil failed: %1").arg(stderrOut.trimmed());
+        }
+        return false;
+    }
+
+    return true;
+}
+
+bool maybeAttachIcon(const SettingsModel& settings,
+                     const QString& resourcesPath,
+                     QString* outIconFileName,
+                     QString* errorMessage)
+{
+    const QString iconSource = settings.iconPath.trimmed();
+
+    QString iconTargetName = settings.executableFileName().trimmed();
+    if (iconTargetName.isEmpty()) {
+        iconTargetName = QStringLiteral("PyAppExec");
+    }
+    iconTargetName += QStringLiteral(".icns");
+    const QString destination = resourcesPath + QLatin1Char('/') + iconTargetName;
+
+    if (QFile::exists(destination)) {
+        QFile::remove(destination);
+    }
+
+    if (iconSource.isEmpty()) {
+        const QString resourceIcon = QStringLiteral(":/net/quicknode/pyappexec/icons/PyAppExec.icns");
+        if (!QFile::exists(resourceIcon)) {
+            if (errorMessage) {
+                *errorMessage = QObject::tr("Built-in icon resource is missing.");
+            }
+            return false;
+        }
+        if (!QFile::copy(resourceIcon, destination)) {
+            if (errorMessage) {
+                *errorMessage = QObject::tr("Failed to copy the default PyAppExec icon into the bundle.");
+            }
+            return false;
+        }
+    } else {
+        QFileInfo info(iconSource);
+        if (!info.exists() || !info.isFile()) {
+            if (errorMessage) {
+                *errorMessage = QObject::tr("Icon file %1 does not exist.").arg(iconSource);
+            }
+            return false;
+        }
+
+        if (info.suffix().compare(QStringLiteral("icns"), Qt::CaseInsensitive) == 0) {
+            if (!QFile::copy(iconSource, destination)) {
+                if (errorMessage) {
+                    *errorMessage = QObject::tr("Failed to copy icon into bundle.");
+                }
+                return false;
+            }
+        } else {
+            if (!generateIcnsFromImage(iconSource, destination, errorMessage)) {
+                return false;
+            }
+        }
+    }
+
+    if (outIconFileName) {
+        *outIconFileName = iconTargetName;
+    }
+    return true;
+}
+#endif
 }
 
 bool BinaryPackager::install(const SettingsModel& settings,
@@ -69,6 +319,48 @@ bool BinaryPackager::install(const SettingsModel& settings,
         return false;
     }
 
+#if defined(Q_OS_MAC)
+    const QString bundlePath = targetDir.filePath(settings.bundleName());
+    QDir bundleDir(bundlePath);
+    if (bundleDir.exists()) {
+        if (!bundleDir.removeRecursively()) {
+            if (errorMessage) {
+                *errorMessage = QObject::tr("Unable to replace existing bundle at %1").arg(bundlePath);
+            }
+            return false;
+        }
+    }
+    const QString contentsPath = bundlePath + QStringLiteral("/Contents");
+    const QString macosPath = contentsPath + QStringLiteral("/MacOS");
+    const QString resourcesPath = contentsPath + QStringLiteral("/Resources");
+    if (!QDir().mkpath(macosPath) || !QDir().mkpath(resourcesPath)) {
+        if (errorMessage) {
+            *errorMessage = QObject::tr("Failed to create bundle structure at %1").arg(bundlePath);
+        }
+        return false;
+    }
+
+    const QString destLauncher = macosPath + QLatin1Char('/') + settings.executableFileName();
+    if (QFile::exists(destLauncher)) {
+        QFile::remove(destLauncher);
+    }
+    if (!QFile::copy(sourceLauncher, destLauncher)) {
+        if (errorMessage) {
+            *errorMessage = QObject::tr("Failed to copy launcher binary into bundle.");
+        }
+        return false;
+    }
+    QFile::setPermissions(destLauncher, QFile::permissions(destLauncher) | QFile::ExeOwner | QFile::ExeGroup | QFile::ExeOther);
+
+    QString iconFileName;
+    if (!maybeAttachIcon(settings, resourcesPath, &iconFileName, errorMessage)) {
+        return false;
+    }
+
+    if (!writeInfoPlist(contentsPath, settings, settings.executableFileName(), iconFileName, errorMessage)) {
+        return false;
+    }
+#else
     const QString destLauncher = targetDir.filePath(settings.executableFileName());
     if (QFile::exists(destLauncher)) {
         QFile::remove(destLauncher);
@@ -82,6 +374,7 @@ bool BinaryPackager::install(const SettingsModel& settings,
 
 #ifdef Q_OS_UNIX
     QFile::setPermissions(destLauncher, QFile::permissions(destLauncher) | QFile::ExeOwner | QFile::ExeGroup | QFile::ExeOther);
+#endif
 #endif
 
     return true;

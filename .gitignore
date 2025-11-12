@@ -36,6 +36,9 @@
 *.app
 main
 
+# Scripts used in development
+package_installer_app.sh
+
 # External documentation
 readthedocs/
 

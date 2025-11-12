@@ -1,5 +1,7 @@
 <RCC>
   <qresource prefix="/net/quicknode/pyappexec">
     <file alias="logo.png">images/logo.png</file>
+    <file alias="logo_transparent.png">images/logo_transparent.png</file>
+    <file alias="icons/PyAppExec.icns">icons/macos/PyAppExec.icns</file>
   </qresource>
 </RCC>

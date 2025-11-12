@@ -21,6 +21,7 @@ public:
 
 private slots:
     void browseForProject();
+    void browseForIcon();
     void handleInstall();
     void showAboutInstaller();
     void showAboutQtDialog();
@@ -36,6 +37,7 @@ private:
     QLineEdit* projectPathEdit_{nullptr};
     QLineEdit* appNameEdit_{nullptr};
     QLineEdit* executableNameEdit_{nullptr};
+    QLineEdit* iconPathEdit_{nullptr};
     QCheckBox* hideGuiCheck_{nullptr};
     QTextEdit* logView_{nullptr};
     QPushButton* installButton_{nullptr};

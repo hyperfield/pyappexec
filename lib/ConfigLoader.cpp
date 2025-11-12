@@ -4,6 +4,7 @@
 #include <spdlog/spdlog.h>
 #include <filesystem>
 #include <stdexcept>
+#include <system_error>
 
 ConfigLoader::ConfigLoader(const CliOptions& options, const std::filesystem::path& binaryDir)
     : options_(options), binaryDir_(binaryDir) {}
@@ -31,29 +32,71 @@ std::filesystem::path ConfigLoader::resolveConfigPath(const std::optional<std::s
     }
 
     auto searchDir = [](const fs::path& dir) -> std::optional<fs::path> {
+        if (dir.empty()) {
+            return std::nullopt;
+        }
+        std::error_code ec;
+        if (!fs::exists(dir, ec) || !fs::is_directory(dir, ec)) {
+            return std::nullopt;
+        }
         fs::path primary = dir / "pyappexec.ini";
-        if (fs::exists(primary)) {
+        if (fs::exists(primary, ec)) {
             return primary;
         }
-        for (const auto& entry : fs::directory_iterator(dir)) {
-            if (!entry.is_directory()) {
+        fs::directory_iterator it(dir, ec);
+        fs::directory_iterator end;
+        for (; it != end && !ec; ++it) {
+            if (!it->is_directory()) {
                 continue;
             }
-            fs::path candidate = entry.path() / "pyappexec.ini";
-            if (fs::exists(candidate)) {
+            fs::path candidate = it->path() / "pyappexec.ini";
+            if (fs::exists(candidate, ec)) {
                 return candidate;
             }
         }
         return std::nullopt;
     };
 
-    if (auto fromCwd = searchDir(fs::current_path())) {
+    auto searchWithParents = [&](fs::path dir) -> std::optional<fs::path> {
+        if (dir.empty()) {
+            return std::nullopt;
+        }
+        std::error_code ec;
+        if (!fs::exists(dir, ec)) {
+            return std::nullopt;
+        }
+        constexpr int kMaxParentDepth = 4;
+        for (int depth = 0; depth <= kMaxParentDepth && !dir.empty(); ++depth) {
+            if (auto found = searchDir(dir)) {
+                return found;
+            }
+            auto parent = dir.parent_path();
+            if (parent.empty() || parent == dir) {
+                break;
+            }
+            dir = parent;
+        }
+        return std::nullopt;
+    };
+
+    if (auto fromCwd = searchWithParents(fs::current_path())) {
         return *fromCwd;
     }
 
     if (!binaryDir_.empty()) {
-        if (auto fromBinary = searchDir(binaryDir_)) {
-            return *fromBinary;
+        fs::path binaryPath = binaryDir_;
+        if (!binaryPath.is_absolute()) {
+            binaryPath = fs::absolute(binaryPath);
+        }
+        std::error_code eqEc;
+        bool isSameAsCwd = fs::equivalent(binaryPath, fs::current_path(), eqEc);
+        if (eqEc) {
+            isSameAsCwd = false;
+        }
+        if (!isSameAsCwd) {
+            if (auto fromBinary = searchWithParents(binaryPath)) {
+                return *fromBinary;
+            }
         }
     }
 
