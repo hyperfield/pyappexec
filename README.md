@@ -109,6 +109,25 @@ On Linux, install the toolchain and development headers via your package manager
   sudo pacman -S --needed base-devel cmake pkgconf glib2 qt6-base spdlog boost curl
   ```
 
+- **Windows (MSVC + vcpkg):**
+
+  1. Install [Visual Studio 2022](https://visualstudio.microsoft.com/downloads/) (Desktop development with C++) or the standalone Build Tools so `cl.exe`, the Windows SDK, and CMake integration are available.
+  2. Bootstrap [vcpkg](https://github.com/microsoft/vcpkg) and install the dependencies:
+     ```powershell
+     git clone https://github.com/microsoft/vcpkg.git C:\dev\vcpkg
+     C:\dev\vcpkg\bootstrap-vcpkg.bat
+     C:\dev\vcpkg\vcpkg.exe install qtbase:x64-windows spdlog:x64-windows
+     ```
+  3. Configure the project from a “x64 Native Tools Command Prompt for VS” (or Developer PowerShell) so MSVC is on `PATH`:
+     ```powershell
+     cmake -S . -B build `
+           -DCMAKE_BUILD_TYPE=Release `
+           -DCMAKE_TOOLCHAIN_FILE=C:/dev/vcpkg/scripts/buildsystems/vcpkg.cmake `
+           -DVCPKG_TARGET_TRIPLET=x64-windows
+     cmake --build build --parallel
+     ```
+     > If CMake still complains that `Qt6 was not found`, confirm that `qtbase:x64-windows` was installed and that the same vcpkg root is passed via `CMAKE_TOOLCHAIN_FILE`. Setting `VCPKG_ROOT=C:\dev\vcpkg` globally also works.
+
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --parallel
