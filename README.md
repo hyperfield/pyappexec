@@ -82,7 +82,7 @@ To build the launcher you need:
 - `pkg-config` and the development headers for `gio-2.0` (part of GLib) — these provide `glib-compile-resources` and the GIO runtime used to embed scripts. On macOS install them with `brew install glib libffi zlib`.
 - Qt 6 (Widgets module) headers and libraries for the optional GUI front-end.
 - [spdlog](https://github.com/gabime/spdlog) (header-only logging library) for structured logging output.
-- Boost (Boost.Process header is required; the default compiled Boost libraries are optional on most platforms).
+- Boost with the Process headers **and** the Filesystem/System libraries (Boost.Process depends on the compiled `boost_filesystem` + `boost_system` pair on Linux).
 - `curl` (Linux/macOS) or the Windows URLMon APIs (already part of Win32) for downloading requirement archives.
 
 ### Build
@@ -93,8 +93,9 @@ On Linux, install the toolchain and development headers via your package manager
 
   ```bash
   sudo apt update
-  sudo apt install build-essential cmake pkg-config libglib2.0-dev qt6-base-dev libspdlog-dev libboost-all-dev libcurl4-openssl-dev
+  sudo apt install build-essential cmake pkg-config libglib2.0-dev qt6-base-dev libspdlog-dev libboost-dev libboost-filesystem-dev libboost-system-dev libcurl4-openssl-dev
   ```
+  > If `cmake` reports `Could not find a package configuration file provided by "boost_filesystem"`, it means the `libboost-filesystem-dev` package is missing; install it alongside `libboost-dev` so Boost.Process can link against the filesystem/system libraries.
 
 - **Fedora-based (Fedora, RHEL, CentOS Stream):**
 
