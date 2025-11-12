@@ -1,9 +1,22 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(pyappexec LANGUAGES C CXX)
+set(_PYAPPEXEC_VERSION_HEADER "${CMAKE_CURRENT_LIST_DIR}/include/app_version.hpp")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${_PYAPPEXEC_VERSION_HEADER}")
+file(READ "${_PYAPPEXEC_VERSION_HEADER}" _PYAPPEXEC_VERSION_HEADER_CONTENTS)
+string(REGEX MATCH "kAppVersion[^\"\\n]*\"([^\"]+)\"" _PYAPPEXEC_VERSION_MATCH "${_PYAPPEXEC_VERSION_HEADER_CONTENTS}")
+if(NOT _PYAPPEXEC_VERSION_MATCH)
+    message(FATAL_ERROR "Unable to extract kAppVersion from ${_PYAPPEXEC_VERSION_HEADER}")
+endif()
+set(PYAPPEXEC_APP_VERSION "${CMAKE_MATCH_1}")
+
+project(pyappexec VERSION ${PYAPPEXEC_APP_VERSION} LANGUAGES C CXX)
 
 option(BUILD_LAUNCHER "Build the PyAppExec launcher" ON)
 option(BUILD_INSTALLER "Build the PyAppExec installer" ON)
+
+if(POLICY CMP0167)
+    cmake_policy(SET CMP0167 OLD)
+endif()
 
 # vcpkg/Qt discovery convenience so developers can just point at a toolchain or VCPKG_ROOT
 set(_PYAPPEXEC_VCPKG_ROOT "")
