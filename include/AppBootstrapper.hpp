@@ -25,6 +25,9 @@ struct Requirement {
     std::string launch_file;
     // cppcheck-suppress unusedStructMember
     bool capture_stderr{false};
+    bool append_to_path{false};
+    bool standalone{false};
+    std::string install_dir;
     std::string install_command;
     std::optional<bool> last_version_check_result;
     bool status_reported{false};
@@ -76,6 +79,7 @@ private:
     std::filesystem::path virtual_env_path;
     std::vector<std::string> exec_app_args;
     std::vector<std::pair<std::string, std::string>> exec_app_env;
+    std::vector<std::filesystem::path> requirement_bin_paths_;
 
     // cppcheck-suppress unusedPrivateField
     std::vector<Requirement> requirements;
@@ -94,6 +98,8 @@ private:
         const std::filesystem::path& pythonExecutable,
         const std::vector<std::string>& args,
         const std::string& action) const;
+    void addRequirementPath(const std::filesystem::path& path);
+    void maybeAddRequirementPathFromVersionCheck(const Requirement& req);
 #if defined(__linux__)
     struct PackageManagerInfo {
         std::string name;

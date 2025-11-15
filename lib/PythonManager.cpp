@@ -3,12 +3,15 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
+#include <cstring>
 #include <iostream>
+#include <filesystem>
 #include <iterator>
 #include <regex>
 #include <sstream>
 #include <stdexcept>
 #include <vector>
+#include <unordered_set>
 #include <spdlog/spdlog.h>
 
 
@@ -95,9 +98,20 @@ std::string PythonManager::resolvePythonCommand()
     }
 
     std::vector<std::string> candidates;
+    std::unordered_set<std::string> seen;
+    const auto addCandidate = [&](std::string path) {
+        if (path.empty()) {
+            return;
+        }
+        std::replace(path.begin(), path.end(), '\\', '/');
+        if (seen.insert(path).second) {
+            candidates.emplace_back(std::move(path));
+        }
+    };
+
     if (const char* overrideCmd = std::getenv("PYAPPEXEC_PYTHON")) {
         if (overrideCmd[0] != '\0') {
-            candidates.emplace_back(overrideCmd);
+            addCandidate(overrideCmd);
         }
     }
 
@@ -107,7 +121,9 @@ std::string PythonManager::resolvePythonCommand()
         "/usr/local/bin/python3",
         "/Library/Frameworks/Python.framework/Versions/Current/bin/python3"
     };
-    candidates.insert(candidates.end(), macPaths.begin(), macPaths.end());
+    for (const auto& p : macPaths) {
+        addCandidate(p);
+    }
 #endif
 
 #ifdef _WIN32
@@ -115,7 +131,66 @@ std::string PythonManager::resolvePythonCommand()
 #else
     const std::vector<std::string> defaultCandidates = {"python3", "python"};
 #endif
-    candidates.insert(candidates.end(), defaultCandidates.begin(), defaultCandidates.end());
+    for (const auto& p : defaultCandidates) {
+        addCandidate(p);
+    }
+
+#ifdef _WIN32
+    namespace fs = std::filesystem;
+
+    const auto scanPythonDirPath = [&addCandidate](const fs::path& rootPath) {
+        std::error_code ec;
+        if (!fs::exists(rootPath, ec) || !fs::is_directory(rootPath, ec)) {
+            return;
+        }
+        for (const auto& entry : fs::directory_iterator(rootPath, ec)) {
+            if (!entry.is_directory(ec)) {
+                continue;
+            }
+            const auto name = entry.path().filename().string();
+            if (name.rfind("Python", 0) == 0) { // starts with "Python"
+                addCandidate((entry.path() / "python.exe").string());
+                addCandidate((entry.path() / "python3.exe").string());
+                addCandidate((entry.path() / "python3.13.exe").string());
+            }
+        }
+    };
+
+    const auto scanPythonDirsFromEnv = [&scanPythonDirPath](const char* rootEnv) {
+        if (!rootEnv || std::strlen(rootEnv) == 0) {
+            return;
+        }
+        scanPythonDirPath(fs::path(rootEnv));
+    };
+#endif
+
+#ifdef _WIN32
+    auto scanLocalBase = [&](const fs::path& base) {
+        if (base.empty()) {
+            return;
+        }
+        // Microsoft Store shims live here when installed from the Store.
+        addCandidate((base / "Microsoft/WindowsApps/python3.13.exe").string());
+        addCandidate((base / "Microsoft/WindowsApps/python3.exe").string());
+        addCandidate((base / "Microsoft/WindowsApps/python.exe").string());
+        addCandidate((base / "Microsoft/WindowsApps/py.exe").string());
+        // Traditional installer under the user's profile.
+        scanPythonDirPath(base / "Programs/Python");
+        // Some Store layouts place the real python.exe under a package folder.
+        scanPythonDirPath(base / "Microsoft/WindowsApps");
+    };
+
+    fs::path localBase;
+    if (const char* localAppData = std::getenv("LOCALAPPDATA")) {
+        localBase = fs::path(localAppData);
+    } else if (const char* userProfile = std::getenv("USERPROFILE")) {
+        localBase = fs::path(userProfile) / "AppData/Local";
+    }
+    scanLocalBase(localBase);
+
+    scanPythonDirsFromEnv(std::getenv("ProgramFiles"));
+    scanPythonDirsFromEnv(std::getenv("ProgramFiles(x86)"));
+#endif
 
     for (const auto& candidate : candidates) {
         try {
@@ -140,6 +215,11 @@ std::string PythonManager::resolvePythonCommand()
         }
     }
 
+    std::ostringstream candidatesList;
+    for (size_t i = 0; i < candidates.size(); ++i) {
+        candidatesList << (i == 0 ? "" : ", ") << candidates[i];
+    }
+    spdlog::error("Unable to locate a working Python interpreter. Tried: {}", candidatesList.str());
     throw std::runtime_error("Unable to locate a working Python interpreter on PATH.");
 }
 

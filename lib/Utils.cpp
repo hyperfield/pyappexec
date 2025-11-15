@@ -22,12 +22,16 @@
 #include <sstream>
 #include <string>
 #include <iostream>
+#include <fstream>
 // cppcheck-suppress missingIncludeSystem
 #include <vector>
 // cppcheck-suppress missingIncludeSystem
 #include <spdlog/spdlog.h>
 
 #ifdef _WIN32
+    #ifndef _WIN32_WINNT
+        #define _WIN32_WINNT 0x0601
+    #endif
     // cppcheck-suppress missingIncludeSystem
     #include <windows.h>
     #include <urlmon.h>
@@ -154,14 +158,79 @@ bool Utils::downloadFile(const std::string& url, const std::string& fullOutputPa
             return true;
         }
 
-        HRESULT result = URLDownloadToFileA(NULL, url.c_str(), fullOutputPath.c_str(), 0, NULL);
-        if (result == S_OK) {
-            spdlog::info("Download succeeded: {}", fullOutputPath);
-            return true;
-        } else {
-            spdlog::error("Download failed with HRESULT: {}", result);
+        // Stream the download so we can log progress instead of relying on URLDownloadToFile.
+        HINTERNET hInternet = InternetOpenA("PyAppExecDownloader", INTERNET_OPEN_TYPE_DIRECT, NULL, NULL, 0);
+        if (!hInternet) {
+            spdlog::error("InternetOpenA failed while downloading {}", url);
             return false;
         }
+
+        HINTERNET hUrl = InternetOpenUrlA(hInternet, url.c_str(), NULL, 0, INTERNET_FLAG_NO_CACHE_WRITE | INTERNET_FLAG_RELOAD, 0);
+        if (!hUrl) {
+            spdlog::error("InternetOpenUrlA failed for {}", url);
+            InternetCloseHandle(hInternet);
+            return false;
+        }
+
+        DWORD contentLength = 0;
+        DWORD len = sizeof(contentLength);
+        if (!HttpQueryInfoA(hUrl, HTTP_QUERY_CONTENT_LENGTH | HTTP_QUERY_FLAG_NUMBER, &contentLength, &len, NULL)) {
+            contentLength = 0;
+        }
+
+        std::ofstream out(fullOutputPath, std::ios::binary | std::ios::trunc);
+        if (!out) {
+            spdlog::error("Failed to open {} for writing", fullOutputPath);
+            InternetCloseHandle(hUrl);
+            InternetCloseHandle(hInternet);
+            return false;
+        }
+
+        std::string sizeSuffix;
+        if (contentLength) {
+            sizeSuffix = " (" + std::to_string(contentLength / (1024 * 1024)) + " MB)";
+        }
+        spdlog::info("Downloading {} to {}{}", url, fullOutputPath, sizeSuffix);
+
+        const DWORD bufferSize = 64 * 1024;
+        std::vector<char> buffer(bufferSize);
+        size_t downloaded = 0;
+        size_t nextLogThreshold = contentLength ? std::max<size_t>(1024 * 1024, contentLength / 20) : 5 * 1024 * 1024;
+
+        while (true) {
+            DWORD bytesRead = 0;
+            if (!InternetReadFile(hUrl, buffer.data(), bufferSize, &bytesRead)) {
+                spdlog::error("InternetReadFile failed while downloading {}", url);
+                out.close();
+                fs::remove(fullOutputPath);
+                InternetCloseHandle(hUrl);
+                InternetCloseHandle(hInternet);
+                return false;
+            }
+            if (bytesRead == 0) {
+                break; // done
+            }
+            out.write(buffer.data(), bytesRead);
+            downloaded += bytesRead;
+
+            if (downloaded >= nextLogThreshold) {
+                double mb = static_cast<double>(downloaded) / (1024.0 * 1024.0);
+                if (contentLength) {
+                    double percent = (static_cast<double>(downloaded) * 100.0) / static_cast<double>(contentLength);
+                    spdlog::info("Downloaded {:.2f} MB ({:.1f}%)", mb, percent);
+                } else {
+                    spdlog::info("Downloaded {:.2f} MB", mb);
+                }
+                nextLogThreshold = downloaded + (contentLength ? std::max<size_t>(1024 * 1024, contentLength / 20) : 5 * 1024 * 1024);
+            }
+        }
+
+        out.close();
+        InternetCloseHandle(hUrl);
+        InternetCloseHandle(hInternet);
+
+        spdlog::info("Download succeeded: {}", fullOutputPath);
+        return true;
 
     #else
         std::string command = "curl -C - -L -o \"" + fullOutputPath + "\" \"" + url + "\"";

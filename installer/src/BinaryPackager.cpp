@@ -4,6 +4,7 @@
 #include <array>
 #include <QCoreApplication>
 #include <QDir>
+#include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
 #include <QTextStream>
@@ -22,6 +23,26 @@
 namespace installer {
 
 namespace {
+bool copyFileOverwrite(const QString& source,
+                       const QString& destination,
+                       const QString& failureContext,
+                       QString* errorMessage)
+{
+    if (QFile::exists(destination) && !QFile::remove(destination)) {
+        if (errorMessage) {
+            *errorMessage = QObject::tr("Failed to replace %1").arg(destination);
+        }
+        return false;
+    }
+    if (!QFile::copy(source, destination)) {
+        if (errorMessage) {
+            *errorMessage = failureContext.arg(source, destination);
+        }
+        return false;
+    }
+    return true;
+}
+
 QString launcherSourcePath()
 {
     const QDir appDir(QCoreApplication::applicationDirPath());
@@ -371,6 +392,46 @@ bool BinaryPackager::install(const SettingsModel& settings,
         }
         return false;
     }
+
+#ifdef Q_OS_WIN
+    // Bundle the Qt platform plugin and Qt/third-party DLLs that sit next to the launcher
+    const QString sourceDir = QFileInfo(sourceLauncher).absolutePath();
+    const QString platformDir = sourceDir + QStringLiteral("/platforms");
+    if (QDir(platformDir).exists()) {
+        const QString destPlatformDir = targetDir.filePath(QStringLiteral("platforms"));
+        if (!QDir().mkpath(destPlatformDir)) {
+            if (errorMessage) {
+                *errorMessage = QObject::tr("Failed to create platforms directory at %1").arg(destPlatformDir);
+            }
+            return false;
+        }
+        QDirIterator it(platformDir, QDir::Files | QDir::NoSymLinks, QDirIterator::Subdirectories);
+        while (it.hasNext()) {
+            const QString sourcePath = it.next();
+            const QString relativePath = QDir(platformDir).relativeFilePath(sourcePath);
+            const QString destPath = destPlatformDir + QLatin1Char('/') + relativePath;
+            const QString parentDir = QFileInfo(destPath).absolutePath();
+            QDir().mkpath(parentDir);
+            if (!copyFileOverwrite(sourcePath, destPath,
+                                   QObject::tr("Failed to copy Qt platform plugin from %1 to %2"),
+                                   errorMessage)) {
+                return false;
+            }
+        }
+    }
+
+    QDirIterator dllIt(sourceDir, QStringList{QStringLiteral("*.dll")}, QDir::Files | QDir::NoSymLinks);
+    while (dllIt.hasNext()) {
+        const QString dllPath = dllIt.next();
+        const QString fileName = QFileInfo(dllPath).fileName();
+        const QString destPath = targetDir.filePath(fileName);
+        if (!copyFileOverwrite(dllPath, destPath,
+                               QObject::tr("Failed to copy runtime library from %1 to %2"),
+                               errorMessage)) {
+            return false;
+        }
+    }
+#endif
 
 #ifdef Q_OS_UNIX
     QFile::setPermissions(destLauncher, QFile::permissions(destLauncher) | QFile::ExeOwner | QFile::ExeGroup | QFile::ExeOther);

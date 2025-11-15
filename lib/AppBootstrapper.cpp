@@ -34,6 +34,13 @@ namespace bp = boost::process;
 #undef PYAPPEXEC_USE_BOOST_PROCESS_V1
 
 namespace {
+const char kPathSeparator =
+#ifdef _WIN32
+    ';';
+#else
+    ':';
+#endif
+
 std::string trimCopy(const std::string& input) {
     std::string trimmed = input;
     auto notSpace = [](unsigned char ch) { return !std::isspace(ch); };
@@ -132,10 +139,13 @@ void AppBootstrapper::parseRequirementsSection(const std::string& reqSection)
         std::string key_cmd_params = "requirement_" + std::to_string(index) + "_cmd_params";
         std::string key_version_cmd = "requirement_" + std::to_string(index) + "_version_check_command";
         std::string key_version_regex = "requirement_" + std::to_string(index) + "_version_regex";
-        std::string key_min_version = "requirement_" + std::to_string(index) + "_min_version";
-        std::string key_launch_file = "requirement_" + std::to_string(index) + "_launch_file";
-        std::string key_capture_stderr = "requirement_" + std::to_string(index) + "_capture_stderr";
-        std::string key_install_command = "requirement_" + std::to_string(index) + "_install_command";
+    std::string key_min_version = "requirement_" + std::to_string(index) + "_min_version";
+    std::string key_launch_file = "requirement_" + std::to_string(index) + "_launch_file";
+    std::string key_capture_stderr = "requirement_" + std::to_string(index) + "_capture_stderr";
+    std::string key_append_path = "requirement_" + std::to_string(index) + "_append_to_path";
+    std::string key_standalone = "requirement_" + std::to_string(index) + "_standalone";
+    std::string key_install_dir = "requirement_" + std::to_string(index) + "_install_dir";
+    std::string key_install_command = "requirement_" + std::to_string(index) + "_install_command";
 
         std::string req_name = specConfig.get_value(reqSection, key_name, false);
         std::string req_url = specConfig.get_value(reqSection, key_url, false);
@@ -151,11 +161,14 @@ void AppBootstrapper::parseRequirementsSection(const std::string& reqSection)
         req.file_name = req_file_name;
         req.cmd_params = specConfig.get_value(reqSection, key_cmd_params, false);
         req.version_check_command = specConfig.get_value(reqSection, key_version_cmd, false);
-        req.version_regex = specConfig.get_value(reqSection, key_version_regex, false);
-        req.min_version = specConfig.get_value(reqSection, key_min_version, false);
-        req.launch_file = specConfig.get_value(reqSection, key_launch_file, false);
-        req.capture_stderr = parseBool(specConfig.get_value(reqSection, key_capture_stderr, false), false);
-        req.install_command = specConfig.get_value(reqSection, key_install_command, false);
+    req.version_regex = specConfig.get_value(reqSection, key_version_regex, false);
+    req.min_version = specConfig.get_value(reqSection, key_min_version, false);
+    req.launch_file = specConfig.get_value(reqSection, key_launch_file, false);
+    req.capture_stderr = parseBool(specConfig.get_value(reqSection, key_capture_stderr, false), false);
+    req.append_to_path = parseBool(specConfig.get_value(reqSection, key_append_path, false), false);
+    req.standalone = parseBool(specConfig.get_value(reqSection, key_standalone, false), false);
+    req.install_dir = specConfig.get_value(reqSection, key_install_dir, false);
+    req.install_command = specConfig.get_value(reqSection, key_install_command, false);
 
         requirements.emplace_back(req);
         index++;
@@ -330,6 +343,14 @@ bool AppBootstrapper::launchPythonApp()
         for (const auto& entry : exec_app_env) {
             env[entry.first] = entry.second;
         }
+        if (!requirement_bin_paths_.empty()) {
+            std::string pathEnv = env["PATH"].to_string();
+            for (const auto& p : requirement_bin_paths_) {
+                pathEnv.push_back(kPathSeparator);
+                pathEnv.append(p.string());
+            }
+            env["PATH"] = pathEnv;
+        }
 
         bp::child process(
             bp::exe = pythonExecutable.string(),
@@ -369,17 +390,6 @@ bool AppBootstrapper::installRequirements()
             continue;
         }
 
-        if (!req.install_command.empty()) {
-            spdlog::info("Installing {} using command: {}", req.name, req.install_command);
-            int result = std::system(req.install_command.c_str());
-            if (result != 0) {
-                spdlog::error("Failed to install {} (exit code {}).", req.name, result);
-                success = false;
-                break;
-            }
-            continue;
-        }
-
         if (req.url.empty()) {
             spdlog::info("No installer URL configured for {}. Skipping.", req.name);
             continue;
@@ -392,6 +402,115 @@ bool AppBootstrapper::installRequirements()
             spdlog::warn("Installer for {} is not available at {}. Skipping.",
                          req.name, installerPath.string());
             continue;
+        }
+
+        if (!req.install_command.empty()) {
+            spdlog::info("Installing {} using command: {}", req.name, req.install_command);
+            int result = std::system(req.install_command.c_str());
+            if (result != 0) {
+                spdlog::error("Failed to install {} (exit code {}).", req.name, result);
+                success = false;
+                break;
+            }
+            continue;
+        }
+
+        bool handled = false;
+        if (req.install_command.empty() && req.cmd_params.empty()) {
+            fs::path destDir;
+            if (req.standalone && !req.install_dir.empty()) {
+                destDir = fs::path(req.install_dir);
+            } else if (req.standalone) {
+                #ifdef _WIN32
+                std::string programFiles = std::getenv("ProgramFiles") ? std::getenv("ProgramFiles") : "C:/Program Files";
+                #else
+                std::string programFiles = "/usr/local";
+                #endif
+                destDir = fs::path(programFiles) / (req.name.empty() ? installerPath.stem() : fs::path(req.name));
+            } else {
+                destDir = distribDir / installerPath.stem();
+            }
+
+            std::error_code dirEc;
+            fs::create_directories(destDir, dirEc);
+
+            auto runCommand = [&](const std::string& command) -> bool {
+                spdlog::info("Installing {} by extracting archive: {}", req.name, command);
+                int result = std::system(command.c_str());
+                if (result != 0) {
+                    spdlog::error("Failed to extract {} (exit code {}).", req.name, result);
+                    return false;
+                }
+                if (req.append_to_path) {
+                    addRequirementPath(destDir);
+                }
+                return true;
+            };
+
+            const std::string ext = installerPath.extension().string();
+#ifdef _WIN32
+            if (ext == ".zip") {
+                std::ostringstream cmd;
+                cmd << "powershell -ExecutionPolicy Bypass -Command \""
+                    << "$ErrorActionPreference='Stop';"
+                    << "$ProgressPreference='SilentlyContinue';"
+                    << "$dl='" << installerPath.string() << "';"
+                    << "$dest='" << destDir.string() << "';"
+                    << "if(Test-Path $dest){Remove-Item $dest -Recurse -Force};"
+                    << "Expand-Archive -LiteralPath $dl -DestinationPath $dest -Force;"
+                    << "$ff=Get-ChildItem -Path $dest -Filter 'ffmpeg.exe' -Recurse -File | Select-Object -First 1;"
+                    << "if($ff){Copy-Item $ff.FullName -Destination (Join-Path $dest 'ffmpeg.exe') -Force};"
+                    << "$fp=Get-ChildItem -Path $dest -Filter 'ffprobe.exe' -Recurse -File | Select-Object -First 1;"
+                    << "if($fp){Copy-Item $fp.FullName -Destination (Join-Path $dest 'ffprobe.exe') -Force};"
+                    << "\"";
+                handled = runCommand(cmd.str());
+                if (!handled) {
+                    success = false;
+                    break;
+                }
+                continue;
+            }
+#else
+            auto toolAvailable = [](const std::string& tool) {
+                std::string probe = "command -v " + tool + " >/dev/null 2>&1";
+                return std::system(probe.c_str()) == 0;
+            };
+
+            std::string command;
+            std::string lowerName = installerPath.filename().string();
+            std::transform(lowerName.begin(), lowerName.end(), lowerName.begin(), ::tolower);
+
+            if (lowerName.ends_with(".tar.gz") || lowerName.ends_with(".tgz") ||
+                lowerName.ends_with(".tar.bz2") || lowerName.ends_with(".tbz2") ||
+                lowerName.ends_with(".tar.xz") || lowerName.ends_with(".txz") ||
+                lowerName.ends_with(".tar")) {
+                if (toolAvailable("tar")) {
+                    command = "tar -xf \"" + installerPath.string() + "\" -C \"" + destDir.string() + "\"";
+                }
+            } else if (lowerName.ends_with(".zip")) {
+                if (toolAvailable("unzip")) {
+                    command = "unzip -o \"" + installerPath.string() + "\" -d \"" + destDir.string() + "\"";
+                }
+            } else if (lowerName.ends_with(".7z") || lowerName.ends_with(".rar")) {
+                if (toolAvailable("7z")) {
+                    command = "7z x -y \"" + installerPath.string() + "\" -o\"" + destDir.string() + "\"";
+                } else if (toolAvailable("7za")) {
+                    command = "7za x -y \"" + installerPath.string() + "\" -o\"" + destDir.string() + "\"";
+                }
+            }
+
+            if (!command.empty()) {
+                handled = runCommand(command);
+                if (!handled) {
+                    success = false;
+                    break;
+                }
+                continue;
+            } else {
+                spdlog::warn("No suitable extractor found for {}. Provide an explicit install_command for this requirement.",
+                             installerPath.string());
+            }
+#endif
         }
 
         if (!Utils::isWindows()) {
@@ -866,6 +985,9 @@ bool AppBootstrapper::isRequirementAlreadyInstalled(Requirement& req)
     logRequirementStatus(req, version, meets);
     req.last_version_check_result = meets;
     req.status_reported = true;
+    if (meets && req.append_to_path) {
+        maybeAddRequirementPathFromVersionCheck(req);
+    }
     return meets;
 }
 
@@ -881,6 +1003,44 @@ std::string AppBootstrapper::getOSPrefix()
 #else
     throw std::runtime_error("Unsupported OS");
 #endif
+}
+
+void AppBootstrapper::addRequirementPath(const fs::path& path)
+{
+    if (path.empty()) {
+        return;
+    }
+    fs::path normalized = path;
+    std::error_code ec;
+    normalized = fs::weakly_canonical(normalized, ec);
+    if (ec) {
+        normalized = path.lexically_normal();
+    }
+    for (const auto& existing : requirement_bin_paths_) {
+        if (existing == normalized) {
+            return;
+        }
+    }
+    requirement_bin_paths_.push_back(normalized);
+}
+
+void AppBootstrapper::maybeAddRequirementPathFromVersionCheck(const Requirement& req)
+{
+    std::istringstream ss(req.version_check_command);
+    std::string firstToken;
+    ss >> firstToken;
+    if (firstToken.empty()) {
+        return;
+    }
+    fs::path candidate(firstToken);
+    if (!candidate.has_parent_path()) {
+        return;
+    }
+    fs::path dir = candidate.parent_path();
+    if (!dir.is_absolute()) {
+        dir = python_app_dir / dir;
+    }
+    addRequirementPath(dir);
 }
 
 

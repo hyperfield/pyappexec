@@ -11,6 +11,15 @@ set(INSTALLER_SOURCES
     ${CMAKE_SOURCE_DIR}/resources/qt_resources.qrc
 )
 
+# Ensure the Windows icon resource is embedded, mirroring the launcher binary.
+if(WIN32)
+    set(_installer_icon_rc "${CMAKE_BINARY_DIR}/appicon.rc")
+    if(NOT EXISTS "${_installer_icon_rc}")
+        configure_file(${CMAKE_SOURCE_DIR}/resources/win/appicon.rc.in "${_installer_icon_rc}" @ONLY)
+    endif()
+    list(APPEND INSTALLER_SOURCES "${_installer_icon_rc}")
+endif()
+
 add_executable(pyappexec_installer ${INSTALLER_SOURCES})
 set_common_runtime_output(pyappexec_installer)
 
