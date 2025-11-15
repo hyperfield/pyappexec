@@ -1,3 +1,7 @@
+if(NOT DEFINED CMAKE_POLICY_DEFAULT_CMP0167)
+    set(CMAKE_POLICY_DEFAULT_CMP0167 OLD)
+endif()
+
 cmake_minimum_required(VERSION 3.16)
 
 set(_PYAPPEXEC_VERSION_HEADER "${CMAKE_CURRENT_LIST_DIR}/include/app_version.hpp")
