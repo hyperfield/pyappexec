@@ -220,9 +220,17 @@ Define any number of `requirement_<n>` blocks (numbered sequentially from 1). Ea
 | `requirement_<n>_launch_file` | Name of the executable you expect after extraction (used primarily for logging). |
 | `requirement_<n>_capture_stderr` | When `true`, merges stderr into stdout during version detection. |
 | `requirement_<n>_cmd_params` | Extra parameters appended when running a Windows installer executable. |
-| `requirement_<n>_install_command` | Shell command to run for installing the requirement (Linux/macOS). If provided, PyAppExec skips downloading and executes this command directly. |
+| `requirement_<n>_install_command` | Shell command to run for installing the requirement. If provided, PyAppExec skips the built-in download/extract logic and just runs this command. |
+| `requirement_<n>_append_to_path` | `true` to prepend the requirement’s bin directory to `PATH` when launching your app (inferred from the version check command or extract location). |
+| `requirement_<n>_standalone` | `true` to install/extract to a standalone location instead of `distrib/` (Windows zip auto-extract uses `%ProgramFiles%/<name>` when no `install_dir` is given). |
+| `requirement_<n>_install_dir` | Explicit install/extract directory used when `standalone` is `true`. |
 
 PyAppExec keeps per-requirement status in memory to avoid noisy logs when the version check command is run multiple times.
+
+**Archive/installer handling**
+- Built-in auto-extraction kicks in when both `install_command` and `cmd_params` are empty. On Windows it handles `.zip` via PowerShell. On macOS/Linux it will attempt to extract `.tar.*` via `tar`, `.zip` via `unzip`, and `.7z`/`.rar` via `7z`/`7za` if those tools are on `PATH`; otherwise you must provide an `install_command`.
+- Any other formats (executable installers, pkg/msi, unsupported archives) require an explicit `install_command`.
+- When `append_to_path` is `true`, the launcher prepends the requirement’s bin directory to `PATH` before starting your app, whether the requirement was auto-extracted or detected via `version_check_command`.
 
 ### Example
 
