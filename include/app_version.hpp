@@ -5,7 +5,7 @@
 
 namespace AppVersion {
 
-inline constexpr std::string_view kAppVersion = "0.2.0";
+inline constexpr std::string_view kAppVersion = "0.3.0";
 
 } // namespace AppVersion
 

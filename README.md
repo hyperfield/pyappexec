@@ -1,4 +1,4 @@
-# PyAppExec
+# PyAppExec ![Version](https://img.shields.io/badge/version-0.3.0-blue)
 
 <div align="center">
   <img src="docs/logo-256.png" alt="PyAppExec logo" width="128" height="128">
@@ -224,6 +224,7 @@ Define any number of `requirement_<n>` blocks (numbered sequentially from 1). Ea
 | `requirement_<n>_append_to_path` | `true` to prepend the requirement’s bin directory to `PATH` when launching your app (inferred from the version check command or extract location). |
 | `requirement_<n>_standalone` | `true` to install/extract to a standalone location instead of `distrib/` (Windows zip auto-extract uses `%ProgramFiles%/<name>` when no `install_dir` is given). |
 | `requirement_<n>_install_dir` | Explicit install/extract directory used when `standalone` is `true`. |
+| `requirement_<n>_require_admin` | `true` to run the install/extract command elevated on Windows (uses UAC); ignored on other platforms. |
 
 PyAppExec keeps per-requirement status in memory to avoid noisy logs when the version check command is run multiple times.
 
