@@ -89,6 +89,10 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
+if(WIN32)
+    add_compile_definitions(_WIN32_WINNT=0x0601)
+endif()
+
 add_compile_definitions(BOOST_PROCESS_VERSION=1)
 
 function(set_common_runtime_output target_name)

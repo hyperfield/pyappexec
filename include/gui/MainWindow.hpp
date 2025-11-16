@@ -18,7 +18,11 @@ class MainWindow : public QMainWindow
     Q_OBJECT
 
 public:
-    explicit MainWindow(const QStringList& cliArguments, const QString& stateFilePath, const QString& appDisplayName, QWidget* parent = nullptr);
+    explicit MainWindow(const QStringList& cliArguments,
+                        const QString& stateFilePath,
+                        const QString& appDisplayName,
+                        bool autoSuppressAfterSuccess,
+                        QWidget* parent = nullptr);
 
 private slots:
     void handleStdOutput();
@@ -44,6 +48,7 @@ private:
     QCheckBox* suppressCheckBox_ {nullptr};
     QProcess* process_ {nullptr};
     bool completedSuccessfully_ {false};
+    bool autoSuppressAfterSuccess_ {false};
 };
 
 #endif

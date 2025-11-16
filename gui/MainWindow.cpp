@@ -43,11 +43,16 @@ QString terminalTitle()
 }
 
 
-MainWindow::MainWindow(const QStringList& cliArguments, const QString& stateFilePath, const QString& appDisplayName, QWidget* parent) :
+MainWindow::MainWindow(const QStringList& cliArguments,
+                       const QString& stateFilePath,
+                       const QString& appDisplayName,
+                       bool autoSuppressAfterSuccess,
+                       QWidget* parent) :
     QMainWindow(parent),
     cliArguments_(cliArguments),
     stateFilePath_(stateFilePath),
-    appDisplayName_(appDisplayName.isEmpty() ? tr("PyAppExec") : appDisplayName)
+    appDisplayName_(appDisplayName.isEmpty() ? tr("PyAppExec") : appDisplayName),
+    autoSuppressAfterSuccess_(autoSuppressAfterSuccess)
 {
     setWindowTitle(QStringLiteral("%1 (via PyAppExec)").arg(appDisplayName_));
     resize(600, 600);
@@ -150,6 +155,9 @@ void MainWindow::handleProcessFinished(int exitCode, QProcess::ExitStatus status
     if (completedSuccessfully_) {
         statusLabel_->setText(tr("Status: completed successfully"));
         suppressCheckBox_->setEnabled(true);
+        if (autoSuppressAfterSuccess_) {
+            suppressCheckBox_->setChecked(true);
+        }
     } else {
         statusLabel_->setText(tr("Status: failed (exit code %1)").arg(exitCode));
         QMessageBox::critical(this, appDisplayName_, tr("The launcher encountered an error. Review the log output above."));

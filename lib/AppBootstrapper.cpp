@@ -41,6 +41,38 @@ const char kPathSeparator =
     ':';
 #endif
 
+bool isProtectedInstallPath(const std::filesystem::path& path)
+{
+#ifdef _WIN32
+    std::string lower = path.string();
+    std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+    return lower.find("program files") != std::string::npos;
+#else
+    (void)path;
+    return false;
+#endif
+}
+
+bool isProcessElevated()
+{
+#ifdef _WIN32
+    BOOL isAdmin = FALSE;
+    SID_IDENTIFIER_AUTHORITY ntAuthority = SECURITY_NT_AUTHORITY;
+    PSID administratorsGroup = nullptr;
+    if (AllocateAndInitializeSid(&ntAuthority, 2,
+                                 SECURITY_BUILTIN_DOMAIN_RID,
+                                 DOMAIN_ALIAS_RID_ADMINS,
+                                 0, 0, 0, 0, 0, 0,
+                                 &administratorsGroup)) {
+        CheckTokenMembership(nullptr, administratorsGroup, &isAdmin);
+        FreeSid(administratorsGroup);
+    }
+    return isAdmin == TRUE;
+#else
+    return true;
+#endif
+}
+
 std::string trimCopy(const std::string& input) {
     std::string trimmed = input;
     auto notSpace = [](unsigned char ch) { return !std::isspace(ch); };
@@ -433,12 +465,29 @@ bool AppBootstrapper::installRequirements()
 
             std::error_code dirEc;
             fs::create_directories(destDir, dirEc);
+            if (dirEc && !fs::exists(destDir)) {
+                spdlog::error("Cannot create install directory {}.", destDir.string());
+#ifdef _WIN32
+                if (!isProcessElevated()) {
+                    spdlog::error("Please relaunch PyAppExec as Administrator or pick a user-writable install_dir.");
+                }
+#endif
+                success = false;
+                break;
+            }
 
             auto runCommand = [&](const std::string& command) -> bool {
                 spdlog::info("Installing {} by extracting archive: {}", req.name, command);
                 int result = std::system(command.c_str());
                 if (result != 0) {
                     spdlog::error("Failed to extract {} (exit code {}).", req.name, result);
+#ifdef _WIN32
+                    if (!isProcessElevated() && (isProtectedInstallPath(destDir) || result == 5 || result == 740)) {
+                        spdlog::error("Extraction may require Administrator rights. Please relaunch PyAppExec as Administrator or choose a user-writable install_dir.");
+                    } else if (isProtectedInstallPath(destDir)) {
+                        spdlog::error("Extraction failed in protected target {}. Please verify installer integrity or permissions.", destDir.string());
+                    }
+#endif
                     return false;
                 }
                 if (req.append_to_path) {
@@ -528,6 +577,13 @@ bool AppBootstrapper::installRequirements()
         int result = std::system(command.c_str());
         if (result != 0) {
             spdlog::error("Failed to install: {}", req.name);
+#ifdef _WIN32
+            if (!isProcessElevated() && (isProtectedInstallPath(installerPath.parent_path()) || result == 5 || result == 740)) {
+                spdlog::error("Install target may require Administrator rights. Please relaunch PyAppExec as Administrator or choose a user-writable install_dir.");
+            } else if (isProtectedInstallPath(installerPath.parent_path())) {
+                spdlog::error("Install failed in protected location {}. Please verify installer integrity or permissions.", installerPath.parent_path().string());
+            }
+#endif
             success = false;
             break;
         }
@@ -1026,13 +1082,29 @@ void AppBootstrapper::addRequirementPath(const fs::path& path)
 
 void AppBootstrapper::maybeAddRequirementPathFromVersionCheck(const Requirement& req)
 {
-    std::istringstream ss(req.version_check_command);
-    std::string firstToken;
-    ss >> firstToken;
-    if (firstToken.empty()) {
+    std::string cmd = req.version_check_command;
+    auto ltrim = [](std::string& s) {
+        s.erase(s.begin(), std::find_if(s.begin(), s.end(), [](unsigned char ch) { return !std::isspace(ch); }));
+    };
+    ltrim(cmd);
+    std::string program;
+    if (cmd.empty()) {
         return;
     }
-    fs::path candidate(firstToken);
+    if (cmd.front() == '"') {
+        const auto endQuote = cmd.find('"', 1);
+        if (endQuote != std::string::npos && endQuote > 1) {
+            program = cmd.substr(1, endQuote - 1);
+        }
+    }
+    if (program.empty()) {
+        std::istringstream ss(cmd);
+        ss >> program;
+    }
+    if (program.empty()) {
+        return;
+    }
+    fs::path candidate(program);
     if (!candidate.has_parent_path()) {
         return;
     }

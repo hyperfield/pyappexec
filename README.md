@@ -200,6 +200,7 @@ PyAppExec is driven entirely by `pyappexec.ini`. Each operating system gets its 
 | `requirements_file` | no | Relative path to the Python requirements file. If omitted, Python dependency installation is skipped. |
 | `virtual_env_dir` | no | Directory to create the virtual environment in (relative to `python_app_dir`). Defaults to `.venv`. |
 | `GUI` | no | `true` to launch the Qt front-end; `false` to stay purely CLI. Users can also pass `--no-gui` at runtime to force CLI regardless of config. |
+| `GUI_HIDE_AFTER_SUCCESS` | no | `true` to automatically set the “hide GUI after successful runs” preference once a run succeeds. |
 | `log_console` | no | `true` (default) to emit logs to stdout/stderr, `false` to silence console output (the GUI still captures logs internally). |
 | `log_level` | no | Minimum severity for console logs. Supports `trace`, `debug`, `info`, `warn`, `error`, `critical`, `off`. |
 
@@ -224,7 +225,6 @@ Define any number of `requirement_<n>` blocks (numbered sequentially from 1). Ea
 | `requirement_<n>_append_to_path` | `true` to prepend the requirement’s bin directory to `PATH` when launching your app (inferred from the version check command or extract location). |
 | `requirement_<n>_standalone` | `true` to install/extract to a standalone location instead of `distrib/` (Windows zip auto-extract uses `%ProgramFiles%/<name>` when no `install_dir` is given). |
 | `requirement_<n>_install_dir` | Explicit install/extract directory used when `standalone` is `true`. |
-| `requirement_<n>_require_admin` | `true` to run the install/extract command elevated on Windows (uses UAC); ignored on other platforms. |
 
 PyAppExec keeps per-requirement status in memory to avoid noisy logs when the version check command is run multiple times.
 

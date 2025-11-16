@@ -381,3 +381,12 @@ bool Utils::isMacOS() {
     return false;
 #endif
 }
+
+int Utils::runCommand(const std::string& command, bool require_admin)
+{
+#ifdef _WIN32
+    return std::system(command.c_str());
+#else
+    return std::system(command.c_str());
+#endif
+}

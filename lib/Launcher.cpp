@@ -116,12 +116,16 @@ int Launcher::run(const CliOptions& options,
         writeGuiPreference(guiPreferenceFile, false);
     }
 
+    std::string mainSection = AppBootstrapper::getOSPrefix() + ":main";
+    bool autoSuppressAfterSuccess = AppBootstrapper::parseBool(
+        specConfig.get_value(mainSection, "GUI_HIDE_AFTER_SUCCESS", false), false);
+
     bool launchGui = shouldLaunchGui(specConfig, options.forceCli);
     if (launchGui && loadGuiPreference(guiPreferenceFile)) {
         launchGui = false;
     }
     if (launchGui) {
-        return runGuiApplication(argc, argv, options.forwardedArgs, guiPreferenceFile.string(), appDisplayName);
+        return runGuiApplication(argc, argv, options.forwardedArgs, guiPreferenceFile.string(), appDisplayName, autoSuppressAfterSuccess);
     }
 
     int result = runCli(specConfig);
@@ -132,6 +136,9 @@ int Launcher::run(const CliOptions& options,
                   << AppMetadata::kVersion << " ("
                   << AppMetadata::kYears << "). Project: "
                   << AppMetadata::kGithub << std::endl;
+        if (autoSuppressAfterSuccess) {
+            writeGuiPreference(guiPreferenceFile, true);
+        }
     }
     return result;
 }
