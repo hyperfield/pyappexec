@@ -113,8 +113,23 @@ std::filesystem::path ConfigLoader::guiPreferenceFile() const
 std::string ConfigLoader::determineAppDisplayName(const SpecConfig& specConfig) const
 {
     std::string mainSection = AppBootstrapper::getOSPrefix() + ":main";
+    std::string appNameValue = specConfig.get_value(mainSection, "app_name", false);
     std::string appDirValue = specConfig.get_value(mainSection, "python_app_dir", false);
     std::filesystem::path baseDir = configPath_.parent_path();
+
+    auto trim = [](std::string s) {
+        auto notSpace = [](unsigned char ch) { return !std::isspace(ch); };
+        s.erase(s.begin(), std::find_if(s.begin(), s.end(), notSpace));
+        s.erase(std::find_if(s.rbegin(), s.rend(), notSpace).base(), s.end());
+        return s;
+    };
+
+    if (!appNameValue.empty()) {
+        appNameValue = trim(appNameValue);
+        if (!appNameValue.empty()) {
+            return appNameValue;
+        }
+    }
 
     auto fallbackName = [&]() {
         std::string name = baseDir.filename().string();

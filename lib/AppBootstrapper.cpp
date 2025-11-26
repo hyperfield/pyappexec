@@ -182,6 +182,14 @@ void AppBootstrapper::parseConfig()
     parseRequirementsSection(reqSection);
 }
 
+fs::path AppBootstrapper::getDistribDir() const
+{
+    if (!config_root_.empty()) {
+        return config_root_ / "distrib";
+    }
+    return fs::path("distrib");
+}
+
 
 void AppBootstrapper::parseMainSection(const std::string& mainSection)
 {
@@ -503,7 +511,7 @@ bool AppBootstrapper::installRequirements()
     }
 
     bool success = true;
-    fs::path distribDir("distrib");
+    fs::path distribDir = getDistribDir();
 
     for (auto& req : requirements) {
         if (req.name.empty()) {
@@ -511,6 +519,22 @@ bool AppBootstrapper::installRequirements()
         }
 
         if (isRequirementAlreadyInstalled(req)) {
+            continue;
+        }
+
+        if (!req.install_command.empty()) {
+            spdlog::info("Installing {} using command: {}", req.name, req.install_command);
+            int result = std::system(req.install_command.c_str());
+            if (result != 0) {
+                spdlog::error("Failed to install {} (exit code {}).", req.name, result);
+#ifdef __APPLE__
+                if (req.install_command.find("brew install") != std::string::npos) {
+                    spdlog::error("Homebrew may be missing; ensure `brew` is on PATH and rerun.");
+                }
+#endif
+                success = false;
+                break;
+            }
             continue;
         }
 
@@ -525,17 +549,6 @@ bool AppBootstrapper::installRequirements()
         if (!fs::exists(installerPath)) {
             spdlog::warn("Installer for {} is not available at {}. Skipping.",
                          req.name, installerPath.string());
-            continue;
-        }
-
-        if (!req.install_command.empty()) {
-            spdlog::info("Installing {} using command: {}", req.name, req.install_command);
-            int result = std::system(req.install_command.c_str());
-            if (result != 0) {
-                spdlog::error("Failed to install {} (exit code {}).", req.name, result);
-                success = false;
-                break;
-            }
             continue;
         }
 
@@ -691,10 +704,11 @@ bool AppBootstrapper::downloadRequirements()
         return true;
     }
 
-    if (!Utils::ensureDirExists("distrib/")) {
-        spdlog::error("Failed to create 'distrib/' directory.");
+    fs::path distribDir = getDistribDir();
+    if (!Utils::ensureDirExists(distribDir.string())) {
+        spdlog::error("Failed to create 'distrib/' directory at {}", distribDir.string());
         // if the directory now exists, we assume another process created it between calls
-        if (!fs::exists("distrib/")) {
+        if (!fs::exists(distribDir)) {
             return false;
         }
     }
@@ -721,7 +735,7 @@ bool AppBootstrapper::downloadRequirements()
         }
 
         std::string fileName = req.file_name.empty() ? Utils::getFileNameFromUrl(req.url) : req.file_name;
-        fs::path req_path = fs::path("distrib") / fileName;
+        fs::path req_path = distribDir / fileName;
     
         if (!Utils::isFileComplete(req_path.string(), req.url)) {
             spdlog::info("Downloading: {} from {}", req.name, req.url);

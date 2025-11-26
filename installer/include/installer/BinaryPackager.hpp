@@ -13,7 +13,9 @@ public:
     bool install(const SettingsModel& settings,
                  const QString& iniContents,
                  QString* createdIniPath,
-                 QString* errorMessage) const;
+                 QString* errorMessage,
+                 bool createBundle,
+                 bool writeIni) const;
 };
 
 } // namespace installer

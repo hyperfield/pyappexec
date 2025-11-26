@@ -65,6 +65,7 @@ public:
     std::string getPythonDownloadUrl();
     std::vector<Requirement> getRequirements();
     bool isRequirementAlreadyInstalled(Requirement& req);
+    std::filesystem::path getDistribDir() const;
 
 private:
     static std::filesystem::path defaultConfigRoot(const std::string& appId);

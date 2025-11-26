@@ -16,6 +16,7 @@
 #include <QMenuBar>
 #include <QRandomGenerator>
 #include <QRegularExpression>
+#include <QSettings>
 #include <QPushButton>
 #include <QPixmap>
 #include <QTextEdit>
@@ -73,7 +74,7 @@ InstallerWindow::InstallerWindow(QWidget* parent) : QMainWindow(parent)
     layout->addWidget(projectRow.container);
     connect(projectRow.browseButton, &QPushButton::clicked, this, &InstallerWindow::browseForProject);
 
-    BrowseRow appNameRow = createBrowseRow(tr("Application name:"), central);
+    BrowseRow appNameRow = createBrowseRow(tr("App name:"), central);
     appNameEdit_ = appNameRow.lineEdit;
     appNameRow.browseButton->hide();
     layout->addWidget(appNameRow.container);
@@ -82,13 +83,6 @@ InstallerWindow::InstallerWindow(QWidget* parent) : QMainWindow(parent)
     executableNameEdit_ = exeRow.lineEdit;
     exeRow.browseButton->hide();
     layout->addWidget(exeRow.container);
-
-    bundleProjectCheck_ = new QCheckBox(tr("Create self-contained .app (copy project into bundle)"), central);
-#if defined(Q_OS_MAC)
-    layout->addWidget(bundleProjectCheck_);
-#else
-    bundleProjectCheck_->hide();
-#endif
 
     BrowseRow appIdRow = createBrowseRow(tr("App ID (6-20 letters/numbers):"), central);
     appIdEdit_ = appIdRow.lineEdit;
@@ -110,6 +104,14 @@ InstallerWindow::InstallerWindow(QWidget* parent) : QMainWindow(parent)
     installButton_->setFixedWidth(220);
     layout->addWidget(installButton_, 0, Qt::AlignHCenter);
     connect(installButton_, &QPushButton::clicked, this, &InstallerWindow::handleInstall);
+
+#if defined(Q_OS_MAC)
+    createBundleButton_ = new QPushButton(tr("Create macOS .app bundle"), central);
+    createBundleButton_->setFixedWidth(220);
+    createBundleButton_->setEnabled(false);
+    layout->addWidget(createBundleButton_, 0, Qt::AlignHCenter);
+    connect(createBundleButton_, &QPushButton::clicked, this, &InstallerWindow::handleCreateBundle);
+#endif
 
     logView_ = new QTextEdit(central);
     logView_->setReadOnly(true);
@@ -162,6 +164,48 @@ void InstallerWindow::refreshInspection()
     for (const QString& note : lastInspection_.notes) {
         logMessage(note);
     }
+
+#if defined(Q_OS_MAC)
+    const QString iniPath = QDir(projectPathEdit_->text()).filePath(QStringLiteral("pyappexec.ini"));
+    const bool hasIni = QFileInfo::exists(iniPath);
+    if (createBundleButton_) {
+        createBundleButton_->setEnabled(hasIni);
+    }
+#endif
+
+    // If an existing INI is present, prefer its metadata for app name/id and GUI preference
+    if (QFileInfo::exists(iniPath)) {
+        QSettings ini(iniPath, QSettings::IniFormat);
+        QString section =
+#if defined(Q_OS_MAC)
+            QStringLiteral("MacOS:main");
+#elif defined(Q_OS_WIN)
+            QStringLiteral("Windows:main");
+#else
+            QStringLiteral("Linux:main");
+#endif
+        if (ini.childGroups().contains(section)) {
+            ini.beginGroup(section);
+            const QString iniAppName = ini.value(QStringLiteral("app_name")).toString().trimmed();
+            if (!iniAppName.isEmpty()) {
+                appNameEdit_->setText(iniAppName);
+            }
+            const QString iniAppId = ini.value(QStringLiteral("app_id")).toString().trimmed();
+            if (!iniAppId.isEmpty()) {
+                appIdEdit_->setText(iniAppId);
+            }
+            const QString guiHide = ini.value(QStringLiteral("GUI_HIDE_AFTER_SUCCESS")).toString();
+            if (!guiHide.isEmpty()) {
+                const QString lowered = guiHide.trimmed().toLower();
+                const bool hide = (lowered == QStringLiteral("1") ||
+                                   lowered == QStringLiteral("true") ||
+                                   lowered == QStringLiteral("yes") ||
+                                   lowered == QStringLiteral("on"));
+                hideGuiCheck_->setChecked(hide);
+            }
+            ini.endGroup();
+        }
+    }
 }
 
 SettingsModel InstallerWindow::gatherSettings() const
@@ -175,9 +219,6 @@ SettingsModel InstallerWindow::gatherSettings() const
         settings.iconPath = iconPathEdit_->text().trimmed();
     }
     settings.hideGuiAfterSuccess = hideGuiCheck_->isChecked();
-#if defined(Q_OS_MAC)
-    settings.bundleProject = bundleProjectCheck_ ? bundleProjectCheck_->isChecked() : false;
-#endif
     return settings;
 }
 
@@ -233,7 +274,7 @@ void InstallerWindow::handleInstall()
         }
     }
 
-    if (!packager.install(settings, iniContents, &createdIni, &error)) {
+    if (!packager.install(settings, iniContents, &createdIni, &error, /*createBundle=*/false, /*writeIni=*/true)) {
         QMessageBox::critical(this, tr("Install failed"), error.isEmpty() ? tr("Unknown error.") : error);
         return;
     }
@@ -243,6 +284,53 @@ void InstallerWindow::handleInstall()
 
     QDesktopServices::openUrl(QUrl::fromLocalFile(createdIni));
     QMessageBox::information(this, tr("Success"), tr("PyAppExec was installed for %1").arg(settings.appName));
+}
+
+void InstallerWindow::handleCreateBundle()
+{
+#if defined(Q_OS_MAC)
+    SettingsModel settings = gatherSettings();
+    settings.bundleProject = true;
+
+    if (settings.projectPath.isEmpty()) {
+        QMessageBox::warning(this, tr("Missing information"), tr("Select a Python project directory."));
+        return;
+    }
+
+    const QString iniPath = QDir(settings.projectPath).filePath(QStringLiteral("pyappexec.ini"));
+    if (!QFileInfo::exists(iniPath)) {
+        QMessageBox::warning(this, tr("Missing configuration"), tr("pyappexec.ini not found in the selected directory."));
+        return;
+    }
+
+    QFile iniFile(iniPath);
+    if (!iniFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        QMessageBox::warning(this, tr("Unable to read INI"), tr("Could not read %1").arg(iniPath));
+        return;
+    }
+    const QString iniContents = QString::fromUtf8(iniFile.readAll());
+    iniFile.close();
+
+    if (!iniContents.contains(QStringLiteral("[MacOS:main]"))) {
+        QMessageBox::warning(this,
+                             tr("Incomplete configuration"),
+                             tr("pyappexec.ini is missing a [MacOS:main] section. Add it before creating a macOS bundle."));
+        return;
+    }
+
+    BinaryPackager packager;
+    QString createdIni;
+    QString error;
+    if (!packager.install(settings, iniContents, &createdIni, &error, /*createBundle=*/true, /*writeIni=*/false)) {
+        QMessageBox::critical(this, tr("Bundle failed"), error.isEmpty() ? tr("Unknown error.") : error);
+        return;
+    }
+
+    logMessage(tr("Created bundled app for %1").arg(settings.appName));
+    QMessageBox::information(this, tr("Success"), tr("Bundled app created."));
+#else
+    QMessageBox::information(this, tr("Not supported"), tr("Bundle creation is macOS-only."));
+#endif
 }
 
 void InstallerWindow::logMessage(const QString& message)

@@ -2,6 +2,7 @@
 
 #include <QString>
 #include <QStringList>
+#include <QFileInfo>
 #include <QRandomGenerator>
 #include <QRegularExpression>
 
@@ -35,6 +36,9 @@ QString IniTemplate::generate(const SettingsModel& settings, const InspectionRes
         ? QStringLiteral("__main__.py")
         : inspection.suggestedExecPath;
     const QString appId = sanitizeAppId(settings.appId.trimmed());
+    const QString appName = settings.appName.trimmed().isEmpty()
+        ? QFileInfo(settings.projectPath).fileName()
+        : settings.appName.trimmed();
 
     auto platformBlock = [&](const QString& os) {
         return QStringLiteral(
@@ -42,19 +46,22 @@ QString IniTemplate::generate(const SettingsModel& settings, const InspectionRes
             "python_download_url = https://www.python.org/ftp/python/3.13.1/Python-3.13.1.tgz\n"
             "python_min_ver = 3.10\n"
             "app_id = %2\n"
+            "app_name = %3\n"
             "config_root = \n"
             "python_app_dir = .\n"
-            "exec_app_path = %3\n"
-            "requirements_file = %4\n"
+            "exec_app_path = %4\n"
+            "requirements_file = %5\n"
             "virtual_env_dir = \n"
-            "GUI = %5\n"
+            "GUI = true\n"
+            "GUI_HIDE_AFTER_SUCCESS = %6\n"
             "log_console = true\n"
             "log_level = info\n\n")
             .arg(os)
             .arg(appId)
+            .arg(appName)
             .arg(execPath)
             .arg(requirements)
-            .arg(settings.hideGuiAfterSuccess ? QStringLiteral("false") : QStringLiteral("true"));
+            .arg(settings.hideGuiAfterSuccess ? QStringLiteral("true") : QStringLiteral("false"));
     };
 
     const QString requirementStub = QStringLiteral(
@@ -67,7 +74,10 @@ QString IniTemplate::generate(const SettingsModel& settings, const InspectionRes
         "requirement_1_min_version = \n"
         "requirement_1_launch_file = \n"
         "requirement_1_capture_stderr = \n"
-        "requirement_1_install_command = \n");
+        "requirement_1_install_command = \n"
+        "requirement_1_append_to_path = \n"
+        "requirement_1_standalone = \n"
+        "requirement_1_install_dir = \n");
 
     QString ini;
     ini += platformBlock(QStringLiteral("Linux"));

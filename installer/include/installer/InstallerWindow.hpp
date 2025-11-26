@@ -23,6 +23,7 @@ private slots:
     void browseForProject();
     void browseForIcon();
     void handleInstall();
+    void handleCreateBundle();
     void showAboutInstaller();
     void showAboutQtDialog();
 
@@ -41,6 +42,7 @@ private:
     QLineEdit* iconPathEdit_{nullptr};
     QCheckBox* hideGuiCheck_{nullptr};
     QCheckBox* bundleProjectCheck_{nullptr};
+    QPushButton* createBundleButton_{nullptr};
     QTextEdit* logView_{nullptr};
     QPushButton* installButton_{nullptr};
 };

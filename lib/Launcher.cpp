@@ -6,12 +6,47 @@
 
 #include <array>
 #include <cctype>
+#include <cstdlib>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <spdlog/spdlog.h>
 
 namespace {
+
+#ifdef __APPLE__
+void ensureMacDefaultPathsInEnv()
+{
+    // Prefer the user's shell PATH (login shell) to avoid the stripped PATH Finder provides.
+    std::string shellPath;
+    if (FILE* pipe = popen("/bin/bash -lc 'echo -n $PATH'", "r")) {
+        char buffer[512];
+        while (size_t n = fread(buffer, 1, sizeof(buffer), pipe)) {
+            shellPath.append(buffer, n);
+        }
+        pclose(pipe);
+    }
+
+    const char* pathEnv = std::getenv("PATH");
+    std::string path = pathEnv ? pathEnv : "";
+    if (!shellPath.empty()) {
+        setenv("PATH", shellPath.c_str(), 1);
+        return;
+    }
+
+    auto hasPath = [&](const std::string& p) { return path.find(p) != std::string::npos; };
+    if (!hasPath("/opt/homebrew/bin")) {
+        if (!path.empty() && path.back() != ':') path += ":";
+        path += "/opt/homebrew/bin";
+    }
+    if (!hasPath("/usr/local/bin")) {
+        if (!path.empty() && path.back() != ':') path += ":";
+        path += "/usr/local/bin";
+    }
+    setenv("PATH", path.c_str(), 1);
+}
+#endif
 
 bool shouldLaunchGui(const SpecConfig& specConfig, bool forceCli)
 {
@@ -108,6 +143,9 @@ int Launcher::run(const CliOptions& options,
                   int argc,
                   char** argv) const
 {
+#ifdef __APPLE__
+    ensureMacDefaultPathsInEnv();
+#endif
     AppBootstrapper appBootstrapper(specConfig);
 
     std::string appDisplayName = loader.determineAppDisplayName(specConfig);
