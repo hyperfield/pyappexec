@@ -201,6 +201,10 @@ PyAppExec ships with an optional Qt-based installer that can scaffold a launcher
 
 Set `GUI = true` under the relevant `[<OS>:main]` section to launch the Qt6 front-end. The GUI embeds the CLI output (PowerShell on Windows, Terminal on macOS/Linux), shows a progress indicator, and surfaces blocking error dialogs if anything fails. The window title automatically displays your Python app name followed by “(via PyAppExec)” so end users can immediately see that PyAppExec is handling the bootstrap. When a run completes successfully you can check “Hide GUI after successful runs” before closing the window; PyAppExec remembers that preference (per app) and skips the GUI going forward, automatically re-enabling it if a later run fails. The Help menu also exposes “About PyAppExec” and “About Qt” dialogs for attribution. Pass `--no-gui` on the command line or set `GUI = false` to force the traditional CLI experience even when the INI enables the GUI. Use `--config /path/to/pyappexec.ini` to point the launcher at a specific configuration file, and `--reset-gui` to clear any saved GUI suppression preference.
 
+**Logging**
+- `log_console` and `log_level` in `[<OS>:main]` control console output; the GUI always captures stdout/stderr internally.
+- The GUI writes its combined output to a log file next to `pyappexec.ini` named `.pyappexec_gui.log`. If you bundle PyAppExec into a macOS `.app`, the log lives inside the bundle at `Your.app/Contents/MacOS/.pyappexec_gui.log` unless you relocate it. For CLI runs, redirect stdout/stderr as desired.
+
 ## Configuration
 
 PyAppExec is driven entirely by `pyappexec.ini`. Each operating system gets its own pair of sections: `[Linux:main]` and `[Linux:requirements]`, `[Windows:main]` and `[Windows:requirements]`, and so on. Keep the INI alongside your Python application (like the sample `test2/pyappexec.ini`) so relative paths resolve naturally; PyAppExec automatically discovers it when launched from the project root.
@@ -243,7 +247,7 @@ Define any number of `requirement_<n>` blocks (numbered sequentially from 1). Ea
 | `requirement_<n>_launch_file` | Name of the executable you expect after extraction (used primarily for logging). |
 | `requirement_<n>_capture_stderr` | When `true`, merges stderr into stdout during version detection. |
 | `requirement_<n>_cmd_params` | Extra parameters appended when running a Windows installer executable. |
-| `requirement_<n>_install_command` | Shell command to run for installing the requirement. If provided, PyAppExec skips the built-in download/extract logic and just runs this command. |
+| `requirement_<n>_install_command` | Shell command to run for installing the requirement. If provided, PyAppExec skips the built-in download/extract logic and just runs this command (even when `requirement_<n>_url` is empty). |
 | `requirement_<n>_append_to_path` | `true` to prepend the requirement’s bin directory to `PATH` when launching your app (inferred from the version check command or extract location). |
 | `requirement_<n>_standalone` | `true` to install/extract to a standalone location instead of `distrib/` (Windows zip auto-extract uses `%ProgramFiles%/<name>` when no `install_dir` is given). |
 | `requirement_<n>_install_dir` | Explicit install/extract directory used when `standalone` is `true`. |
