@@ -136,6 +136,30 @@ fs::path AppBootstrapper::defaultConfigRoot(const std::string& appId)
 #endif
 }
 
+bool AppBootstrapper::requiresProvisioning() const
+{
+    if (const_cast<AppBootstrapper*>(this)->getPythonSetupStatus() != PythonSetupStatus::Status::SUCCESS) {
+        return true;
+    }
+
+    if (virtual_env_path.empty()) {
+        return true;
+    }
+
+    fs::path marker = virtual_env_path / "pyvenv.cfg";
+    if (!fs::exists(marker)) {
+        return true;
+    }
+
+    if (requirements_file.empty()) {
+        return false;
+    }
+
+    std::string signature = computeRequirementsSignature();
+    fs::path stateFile = getRequirementsStateFile();
+    return !isRequirementsStateCurrent(signature, stateFile);
+}
+
 
 AppBootstrapper::AppBootstrapper(const SpecConfig& specConfig) :
     specConfig(specConfig)

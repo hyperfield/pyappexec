@@ -58,6 +58,7 @@ public:
     bool downloadRequirements();
     bool launchPythonApp();
     bool tryInstallPythonFromCommonPackageManagers();
+    bool requiresProvisioning() const;
     static std::string getOSPrefix();
     static bool parseBool(const std::string& value, bool fallback);
 

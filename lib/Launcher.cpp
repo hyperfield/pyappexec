@@ -79,10 +79,8 @@ bool Launcher::ensurePythonReady(AppBootstrapper& appBootstrapper) const
     return true;
 }
 
-int Launcher::runCli(SpecConfig& specConfig) const
+int Launcher::runCli(AppBootstrapper& appBootstrapper) const
 {
-    AppBootstrapper appBootstrapper(specConfig);
-
     if (!ensurePythonReady(appBootstrapper)) {
         return 1;
     }
@@ -110,6 +108,8 @@ int Launcher::run(const CliOptions& options,
                   int argc,
                   char** argv) const
 {
+    AppBootstrapper appBootstrapper(specConfig);
+
     std::string appDisplayName = loader.determineAppDisplayName(specConfig);
     std::filesystem::path guiPreferenceFile = loader.guiPreferenceFile();
     if (options.resetGuiPreference) {
@@ -121,14 +121,14 @@ int Launcher::run(const CliOptions& options,
         specConfig.get_value(mainSection, "GUI_HIDE_AFTER_SUCCESS", false), false);
 
     bool launchGui = shouldLaunchGui(specConfig, options.forceCli);
-    if (launchGui && loadGuiPreference(guiPreferenceFile)) {
+    if (launchGui && loadGuiPreference(guiPreferenceFile) && !appBootstrapper.requiresProvisioning()) {
         launchGui = false;
     }
     if (launchGui) {
         return runGuiApplication(argc, argv, options.forwardedArgs, guiPreferenceFile.string(), appDisplayName, autoSuppressAfterSuccess);
     }
 
-    int result = runCli(specConfig);
+    int result = runCli(appBootstrapper);
     if (result != 0) {
         writeGuiPreference(guiPreferenceFile, false);
     } else {
