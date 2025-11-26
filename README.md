@@ -1,4 +1,4 @@
-# PyAppExec ![Version](https://img.shields.io/badge/version-0.3.0-blue)
+# PyAppExec ![Version](https://img.shields.io/badge/version-0.4.0-blue)
 
 <div align="center">
   <img src="docs/logo-256.png" alt="PyAppExec logo" width="128" height="128">
@@ -189,6 +189,7 @@ PyAppExec ships with an optional Qt-based installer that can scaffold a launcher
 - Run `./scripts/package_installer_app.sh` to produce `dist/PyAppExec_Installer.<version>.<arch>.app`. The script rebuilds the installer binary, converts the iconset under `resources/icons/macos/`, copies Qt frameworks/plugins via `macdeployqt`, and performs an ad-hoc `codesign` so the bundle launches without Gatekeeper warnings. Set `CODESIGN_IDENTITY` if you need to sign with a real certificate.
 - Distribute `PyAppExec_Installer…app` directly to customers. When they launch it, they can browse to their Python project, (optionally) supply an icon, and the installer will drop the PyAppExec launcher + `pyappexec.ini` alongside the project, ready for redistribution on Linux, Windows, or macOS.
 - On macOS/Linux, the installer also drops a `reset_pyappexec.command`/`reset_pyappexec.sh` helper next to the INI/launcher; it removes the managed virtual environment defined in `pyappexec.ini`.
+- On macOS, you can opt to create a self-contained `.app` that embeds your Python project under `Contents/Resources/app`, the launcher, and `pyappexec.ini` (rewritten to point at the bundled sources). The installer attempts an ad-hoc codesign; set `CODESIGN_IDENTITY` to sign with your certificate.
 
 ### Quick start (bundling your Python app)
 

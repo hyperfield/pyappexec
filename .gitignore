@@ -38,6 +38,7 @@ main
 
 # Scripts used in development
 package_installer_app.sh
+update_app_version.py
 
 # External documentation
 readthedocs/

@@ -13,6 +13,7 @@ struct SettingsModel
     QString iconPath;
     QString appId;
     bool hideGuiAfterSuccess{false};
+    bool bundleProject{false};
 
     QString executableFileName() const;
     QString launcherArtifactName() const;

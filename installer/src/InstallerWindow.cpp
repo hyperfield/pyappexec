@@ -83,6 +83,13 @@ InstallerWindow::InstallerWindow(QWidget* parent) : QMainWindow(parent)
     exeRow.browseButton->hide();
     layout->addWidget(exeRow.container);
 
+    bundleProjectCheck_ = new QCheckBox(tr("Create self-contained .app (copy project into bundle)"), central);
+#if defined(Q_OS_MAC)
+    layout->addWidget(bundleProjectCheck_);
+#else
+    bundleProjectCheck_->hide();
+#endif
+
     BrowseRow appIdRow = createBrowseRow(tr("App ID (6-20 letters/numbers):"), central);
     appIdEdit_ = appIdRow.lineEdit;
     appIdRow.browseButton->hide();
@@ -168,6 +175,9 @@ SettingsModel InstallerWindow::gatherSettings() const
         settings.iconPath = iconPathEdit_->text().trimmed();
     }
     settings.hideGuiAfterSuccess = hideGuiCheck_->isChecked();
+#if defined(Q_OS_MAC)
+    settings.bundleProject = bundleProjectCheck_ ? bundleProjectCheck_->isChecked() : false;
+#endif
     return settings;
 }
 

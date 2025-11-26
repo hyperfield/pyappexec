@@ -10,10 +10,10 @@
 #include <QTextStream>
 #include <QObject>
 #include <QIODevice>
+#include <QProcess>
 #ifdef Q_OS_MAC
 #include <QChar>
 #include <QImage>
-#include <QProcess>
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #endif
@@ -150,6 +150,73 @@ bool writeUninstallScript(const QString& scriptPath, const QString& sectionName,
     ts << script.arg(sectionName);
     scriptFile.close();
     QFile::setPermissions(scriptPath, QFile::permissions(scriptPath) | QFile::ExeOwner | QFile::ExeGroup | QFile::ExeOther);
+    return true;
+}
+#endif
+
+#if defined(Q_OS_MAC)
+QString rewriteIniForBundledMac(const QString& iniContents)
+{
+    QStringList lines = iniContents.split(QLatin1Char('\n'));
+    bool inMacSection = false;
+    for (QString& line : lines) {
+        const QString trimmed = line.trimmed();
+        if (trimmed.startsWith(QLatin1Char('[')) && trimmed.endsWith(QLatin1Char(']'))) {
+            inMacSection = trimmed.compare(QStringLiteral("[MacOS:main]"), Qt::CaseInsensitive) == 0;
+        }
+        if (inMacSection && trimmed.startsWith(QStringLiteral("python_app_dir"))) {
+            line = QStringLiteral("python_app_dir = ../Resources/app");
+        }
+    }
+    return lines.join(QLatin1Char('\n'));
+}
+
+bool copyDirectoryRecursive(const QDir& sourceDir,
+                            const QString& destPath,
+                            const QString& skipPath,
+                            QString* errorMessage)
+{
+    if (!sourceDir.exists()) {
+        if (errorMessage) {
+            *errorMessage = QObject::tr("Source directory %1 does not exist.").arg(sourceDir.absolutePath());
+        }
+        return false;
+    }
+
+    QDir destDir(destPath);
+    if (!destDir.exists() && !destDir.mkpath(QStringLiteral("."))) {
+        if (errorMessage) {
+            *errorMessage = QObject::tr("Unable to create destination directory %1").arg(destPath);
+        }
+        return false;
+    }
+
+    QDirIterator it(sourceDir.absolutePath(),
+                    QDir::AllEntries | QDir::NoDotAndDotDot,
+                    QDirIterator::Subdirectories);
+    while (it.hasNext()) {
+        const QString srcPath = it.next();
+        if (srcPath.startsWith(skipPath)) {
+            continue;
+        }
+        const QFileInfo info(srcPath);
+        const QString relPath = sourceDir.relativeFilePath(srcPath);
+        const QString destEntry = destDir.filePath(relPath);
+        if (info.isDir()) {
+            if (!QDir().mkpath(destEntry)) {
+                if (errorMessage) {
+                    *errorMessage = QObject::tr("Failed to create directory %1").arg(destEntry);
+                }
+                return false;
+            }
+        } else if (info.isFile()) {
+            if (!copyFileOverwrite(srcPath, destEntry,
+                                   QObject::tr("Failed to copy %1 to %2"),
+                                   errorMessage)) {
+                return false;
+            }
+        }
+    }
     return true;
 }
 #endif
@@ -494,6 +561,51 @@ bool BinaryPackager::install(const SettingsModel& settings,
 
     if (!writeInfoPlist(contentsPath, settings, settings.executableFileName(), iconFileName, errorMessage)) {
         return false;
+    }
+
+    if (settings.bundleProject) {
+        const QString resourcesAppPath = resourcesPath + QStringLiteral("/app");
+        const QString skipPath = QDir(bundlePath).absolutePath();
+        if (!copyDirectoryRecursive(QDir(settings.projectPath), resourcesAppPath, skipPath, errorMessage)) {
+            return false;
+        }
+
+        const QString bundledIniPath = macosPath + QStringLiteral("/pyappexec.ini");
+        const QString bundledResetPath = macosPath + QStringLiteral("/reset_pyappexec.command");
+        const QString adjustedIni = rewriteIniForBundledMac(iniContents);
+
+        QFile bundledIni(bundledIniPath);
+        if (!bundledIni.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
+            if (errorMessage) {
+                *errorMessage = QObject::tr("Failed to write bundled INI at %1").arg(bundledIniPath);
+            }
+            return false;
+        }
+        QTextStream bundledStream(&bundledIni);
+        bundledStream << adjustedIni;
+        bundledIni.close();
+
+        if (!writeUninstallScript(bundledResetPath, QStringLiteral("MacOS:main"), errorMessage)) {
+            return false;
+        }
+
+        // Ad-hoc codesign to avoid quarantine warnings for local bundles.
+        const QString identity = qEnvironmentVariable("CODESIGN_IDENTITY", QStringLiteral("-"));
+        if (!identity.isEmpty()) {
+            QProcess signer;
+            signer.start(QStringLiteral("codesign"),
+                         QStringList() << QStringLiteral("--force")
+                                       << QStringLiteral("--deep")
+                                       << QStringLiteral("--timestamp=none")
+                                       << QStringLiteral("--sign") << identity
+                                       << bundlePath);
+            if (!signer.waitForFinished(120000) || signer.exitStatus() != QProcess::NormalExit || signer.exitCode() != 0) {
+                if (errorMessage) {
+                    *errorMessage = QObject::tr("codesign failed for %1: %2").arg(bundlePath, QString::fromLocal8Bit(signer.readAllStandardError()));
+                }
+                // don't fail hard if ad-hoc signing isn't available
+            }
+        }
     }
 #else
     const QString destLauncher = targetDir.filePath(settings.executableFileName());
