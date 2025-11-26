@@ -21,6 +21,7 @@
 #include <fstream>
 #include <iostream>
 #include <iterator>
+#include <tuple>
 #include <sstream>
 #include <vector>
 #include <spdlog/spdlog.h>
@@ -84,6 +85,57 @@ std::string trimCopy(const std::string& input) {
 }
 }
 
+std::string AppBootstrapper::sanitizeIdForPath(const std::string& appId)
+{
+    std::string cleaned;
+    cleaned.reserve(appId.size());
+    for (char ch : appId) {
+        if (std::isalnum(static_cast<unsigned char>(ch))) {
+            cleaned.push_back(ch);
+        }
+    }
+    if (cleaned.empty()) {
+        cleaned = "pyappexec";
+    }
+    if (cleaned.size() > 40) {
+        cleaned = cleaned.substr(0, 40);
+    }
+    return cleaned;
+}
+
+fs::path AppBootstrapper::defaultConfigRoot(const std::string& appId)
+{
+    const std::string sanitizedId = sanitizeIdForPath(appId);
+#ifdef _WIN32
+    const char* localAppData = std::getenv("LOCALAPPDATA");
+    const char* appData = std::getenv("APPDATA");
+    fs::path base;
+    if (localAppData && *localAppData) {
+        base = fs::path(localAppData);
+    } else if (appData && *appData) {
+        base = fs::path(appData);
+    } else {
+        base = fs::current_path();
+    }
+    return base / "PyAppExec" / sanitizedId;
+#elif __APPLE__
+    const char* home = std::getenv("HOME");
+    fs::path base = home && *home ? fs::path(home) : fs::current_path();
+    return base / "Library" / "Application Support" / "PyAppExec" / sanitizedId;
+#else
+    const char* xdgData = std::getenv("XDG_DATA_HOME");
+    fs::path base;
+    if (xdgData && *xdgData) {
+        base = fs::path(xdgData);
+    } else {
+        const char* home = std::getenv("HOME");
+        base = home && *home ? fs::path(home) : fs::current_path();
+        base = base / ".local" / "share";
+    }
+    return base / "pyappexec" / sanitizedId;
+#endif
+}
+
 
 AppBootstrapper::AppBootstrapper(const SpecConfig& specConfig) :
     specConfig(specConfig)
@@ -115,6 +167,12 @@ void AppBootstrapper::parseMainSection(const std::string& mainSection)
     std::string execEnvValue = specConfig.get_value(mainSection, "exec_env", false);
     std::string requirementsValue = specConfig.get_value(mainSection, "requirements_file", false);
     std::string virtualEnvValue = specConfig.get_value(mainSection, "virtual_env_dir", false);
+    std::string configRootValue = specConfig.get_value(mainSection, "config_root", false);
+    app_id_ = specConfig.get_value(mainSection, "app_id", false);
+    if (app_id_.empty()) {
+        app_id_ = "pyappexec";
+    }
+    app_id_ = sanitizeIdForPath(app_id_);
 
     python_download_url = specConfig.get_value(mainSection, "python_download_url", false);
     python_min_ver = specConfig.get_value(mainSection, "python_min_ver", true);
@@ -150,10 +208,20 @@ void AppBootstrapper::parseMainSection(const std::string& mainSection)
         ? std::vector<std::pair<std::string, std::string>>{}
         : parseEnvironmentAssignments(execEnvValue);
 
-    if (virtualEnvValue.empty()) {
-        virtualEnvValue = ".venv";
+    if (!configRootValue.empty()) {
+        config_root_ = resolvePath(configRootValue, configDir);
+    } else {
+        config_root_ = defaultConfigRoot(app_id_);
     }
-    virtual_env_path = resolvePath(virtualEnvValue, python_app_dir);
+    if (config_root_.empty()) {
+        config_root_ = configDir;
+    }
+
+    if (virtualEnvValue.empty()) {
+        virtual_env_path = config_root_ / "venv";
+    } else {
+        virtual_env_path = resolvePath(virtualEnvValue, python_app_dir);
+    }
 
     requirements.clear();
 }

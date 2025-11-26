@@ -9,6 +9,7 @@
 #include <QFileInfo>
 #include <QTextStream>
 #include <QObject>
+#include <QIODevice>
 #ifdef Q_OS_MAC
 #include <QChar>
 #include <QImage>
@@ -58,6 +59,100 @@ QString launcherSourcePath()
     }
     return {};
 }
+
+#if !defined(Q_OS_WIN)
+bool writeUninstallScript(const QString& scriptPath, const QString& sectionName, QString* errorMessage)
+{
+    const QString script = QStringLiteral(
+        "#!/bin/bash\n"
+        "set -euo pipefail\n"
+        "SCRIPT_DIR=\"$(cd \"$(dirname \"$0\")\" && pwd)\"\n"
+        "INI=\"$SCRIPT_DIR/pyappexec.ini\"\n"
+        "if [[ ! -f \"$INI\" ]]; then\n"
+        "  echo \"pyappexec.ini not found next to this script.\" >&2\n"
+        "  exit 1\n"
+        "fi\n"
+        "python3 - \"$INI\" <<'PY'\n"
+        "import configparser\n"
+        "import os\n"
+        "import pathlib\n"
+        "import shutil\n"
+        "import sys\n"
+        "\n"
+        "ini = pathlib.Path(sys.argv[1]).resolve()\n"
+        "cfg = configparser.ConfigParser()\n"
+        "if not cfg.read(ini):\n"
+        "    print(f\"Unable to read {ini}\", file=sys.stderr)\n"
+        "    sys.exit(1)\n"
+        "section = \"%1\"\n"
+        "if section not in cfg:\n"
+        "    print(f\"Missing section {section}\", file=sys.stderr)\n"
+        "    sys.exit(1)\n"
+        "\n"
+        "config_dir = ini.parent\n"
+        "python_app_dir = cfg.get(section, \"python_app_dir\", fallback=\".\") or \".\"\n"
+        "virtual_env_dir = cfg.get(section, \"virtual_env_dir\", fallback=\".venv\") or \".venv\"\n"
+        "config_root_val = cfg.get(section, \"config_root\", fallback=\"\")\n"
+        "app_id_val = cfg.get(section, \"app_id\", fallback=\"pyappexec\")\n"
+        "\n"
+        "python_app_path = (config_dir / pathlib.Path(python_app_dir)).resolve()\n"
+        "\n"
+        "def sanitize(app_id: str) -> str:\n"
+        "    cleaned = \"\".join(ch for ch in app_id if ch.isalnum())\n"
+        "    cleaned = cleaned[:40]\n"
+        "    return cleaned or \"pyappexec\"\n"
+        "\n"
+        "def default_config_root(app_id: str) -> pathlib.Path:\n"
+        "    aid = sanitize(app_id)\n"
+        "    home = pathlib.Path(os.environ.get(\"HOME\", \"~\")).expanduser()\n"
+        "    if sys.platform == \"darwin\":\n"
+        "        return home / \"Library\" / \"Application Support\" / \"PyAppExec\" / aid\n"
+        "    if sys.platform.startswith(\"linux\"):\n"
+        "        xdg = os.environ.get(\"XDG_DATA_HOME\")\n"
+        "        base = pathlib.Path(xdg) if xdg else home / \".local\" / \"share\"\n"
+        "        return base / \"pyappexec\" / aid\n"
+        "    return home / \".pyappexec\" / aid\n"
+        "\n"
+        "if config_root_val:\n"
+        "    config_root = pathlib.Path(config_root_val)\n"
+        "    if not config_root.is_absolute():\n"
+        "        config_root = (config_dir / config_root).resolve()\n"
+        "else:\n"
+        "    config_root = default_config_root(app_id_val)\n"
+        "if not virtual_env_dir:\n"
+        "    venv_path = (config_root / \"venv\").resolve()\n"
+        "else:\n"
+        "    venv_path = pathlib.Path(virtual_env_dir)\n"
+        "    if not venv_path.is_absolute():\n"
+        "        venv_path = (python_app_path / venv_path).resolve()\n"
+        "\n"
+        "if not venv_path.exists():\n"
+        "    print(f\"No virtual environment found at {venv_path}\")\n"
+        "    sys.exit(0)\n"
+        "\n"
+        "if not venv_path.is_dir():\n"
+        "    print(f\"{venv_path} exists but is not a directory; refusing to remove.\", file=sys.stderr)\n"
+        "    sys.exit(1)\n"
+        "\n"
+        "print(f\"Removing virtual environment at {venv_path}\")\n"
+        "shutil.rmtree(venv_path)\n"
+        "print(\"Done.\")\n"
+        "PY\n");
+
+    QFile scriptFile(scriptPath);
+    if (!scriptFile.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
+        if (errorMessage) {
+            *errorMessage = QObject::tr("Failed to write uninstaller script at %1").arg(scriptPath);
+        }
+        return false;
+    }
+    QTextStream ts(&scriptFile);
+    ts << script.arg(sectionName);
+    scriptFile.close();
+    QFile::setPermissions(scriptPath, QFile::permissions(scriptPath) | QFile::ExeOwner | QFile::ExeGroup | QFile::ExeOther);
+    return true;
+}
+#endif
 
 #ifdef Q_OS_MAC
 QString sanitizeIdentifierFragment(const QString& value)
@@ -331,6 +426,25 @@ bool BinaryPackager::install(const SettingsModel& settings,
     if (createdIniPath) {
         *createdIniPath = iniPath;
     }
+
+#if !defined(Q_OS_WIN)
+    const QString uninstallScriptName =
+#  if defined(Q_OS_MAC)
+        QStringLiteral("reset_pyappexec.command");
+#  else
+        QStringLiteral("reset_pyappexec.sh");
+#  endif
+    const QString uninstallScriptPath = targetDir.filePath(uninstallScriptName);
+    const QString uninstallSection =
+#  if defined(Q_OS_MAC)
+        QStringLiteral("MacOS:main");
+#  else
+        QStringLiteral("Linux:main");
+#  endif
+    if (!writeUninstallScript(uninstallScriptPath, uninstallSection, errorMessage)) {
+        return false;
+    }
+#endif
 
     const QString sourceLauncher = launcherSourcePath();
     if (sourceLauncher.isEmpty()) {

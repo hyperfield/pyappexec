@@ -23,6 +23,7 @@ public:
     static bool isWindows();
     static bool isLinux();
     static bool isMacOS();
+    static int runCommand(const std::string& command, bool require_admin = false);
 };
 
 #endif

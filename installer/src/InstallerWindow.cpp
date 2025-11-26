@@ -7,12 +7,15 @@
 
 #include <QCheckBox>
 #include <QDesktopServices>
+#include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QMenu>
 #include <QMenuBar>
+#include <QRandomGenerator>
+#include <QRegularExpression>
 #include <QPushButton>
 #include <QPixmap>
 #include <QTextEdit>
@@ -20,6 +23,28 @@
 #include <QUrl>
 
 namespace installer {
+
+namespace {
+
+QString generateAppId(int length = 10)
+{
+    static const QString alphabet = QStringLiteral("ABCDEFGHJKLMNPQRSTUVWXYZ0123456789");
+    QString id;
+    id.reserve(length);
+    for (int i = 0; i < length; ++i) {
+        const int idx = QRandomGenerator::global()->bounded(alphabet.size());
+        id.append(alphabet.at(idx));
+    }
+    return id;
+}
+
+bool isValidAppId(const QString& id)
+{
+    static const QRegularExpression re(QStringLiteral("^[A-Za-z0-9]{6,20}$"));
+    return re.match(id).hasMatch();
+}
+
+} // namespace
 
 InstallerWindow::InstallerWindow(QWidget* parent) : QMainWindow(parent)
 {
@@ -57,6 +82,12 @@ InstallerWindow::InstallerWindow(QWidget* parent) : QMainWindow(parent)
     executableNameEdit_ = exeRow.lineEdit;
     exeRow.browseButton->hide();
     layout->addWidget(exeRow.container);
+
+    BrowseRow appIdRow = createBrowseRow(tr("App ID (6-20 letters/numbers):"), central);
+    appIdEdit_ = appIdRow.lineEdit;
+    appIdRow.browseButton->hide();
+    appIdEdit_->setText(generateAppId());
+    layout->addWidget(appIdRow.container);
 
 #if defined(Q_OS_MAC)
     BrowseRow iconRow = createBrowseRow(tr("App icon (PNG/ICNS):"), central);
@@ -132,6 +163,7 @@ SettingsModel InstallerWindow::gatherSettings() const
     settings.projectPath = projectPathEdit_->text().trimmed();
     settings.appName = appNameEdit_->text().trimmed();
     settings.executableName = executableNameEdit_->text().trimmed();
+    settings.appId = appIdEdit_->text().trimmed();
     if (iconPathEdit_) {
         settings.iconPath = iconPathEdit_->text().trimmed();
     }
@@ -144,6 +176,20 @@ void InstallerWindow::handleInstall()
     SettingsModel settings = gatherSettings();
     if (settings.projectPath.isEmpty()) {
         QMessageBox::warning(this, tr("Missing information"), tr("Select a Python project directory."));
+        return;
+    }
+
+    if (settings.appId.isEmpty()) {
+        settings.appId = generateAppId();
+        appIdEdit_->setText(settings.appId);
+        logMessage(tr("App ID was empty; generated %1").arg(settings.appId));
+    }
+
+    if (!isValidAppId(settings.appId)) {
+        QMessageBox::warning(
+            this,
+            tr("Invalid App ID"),
+            tr("App ID must be 6-20 characters of only letters and numbers."));
         return;
     }
 #if defined(Q_OS_MAC)
@@ -162,6 +208,21 @@ void InstallerWindow::handleInstall()
     BinaryPackager packager;
     QString createdIni;
     QString error;
+
+    const QString iniPath = QDir(settings.projectPath).filePath(QStringLiteral("pyappexec.ini"));
+    if (QFileInfo::exists(iniPath)) {
+        const auto response = QMessageBox::question(
+            this,
+            tr("Overwrite existing configuration?"),
+            tr("%1 already exists. Overwrite it with a new pyappexec.ini?").arg(iniPath),
+            QMessageBox::Yes | QMessageBox::No,
+            QMessageBox::No);
+        if (response != QMessageBox::Yes) {
+            logMessage(tr("Installation cancelled: existing pyappexec.ini left untouched."));
+            return;
+        }
+    }
+
     if (!packager.install(settings, iniContents, &createdIni, &error)) {
         QMessageBox::critical(this, tr("Install failed"), error.isEmpty() ? tr("Unknown error.") : error);
         return;

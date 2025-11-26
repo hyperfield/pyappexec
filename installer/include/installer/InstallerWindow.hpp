@@ -37,6 +37,7 @@ private:
     QLineEdit* projectPathEdit_{nullptr};
     QLineEdit* appNameEdit_{nullptr};
     QLineEdit* executableNameEdit_{nullptr};
+    QLineEdit* appIdEdit_{nullptr};
     QLineEdit* iconPathEdit_{nullptr};
     QCheckBox* hideGuiCheck_{nullptr};
     QTextEdit* logView_{nullptr};

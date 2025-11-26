@@ -66,10 +66,15 @@ public:
     bool isRequirementAlreadyInstalled(Requirement& req);
 
 private:
+    static std::filesystem::path defaultConfigRoot(const std::string& appId);
+    static std::string sanitizeIdForPath(const std::string& appId);
+
     PythonManager python;
     SpecConfig specConfig;
     bool virtual_env_reported_{false};
 
+    std::string app_id_;
+    std::filesystem::path config_root_;
     std::string python_download_url;
     // cppcheck-suppress unusedPrivateField
     std::string python_min_ver;

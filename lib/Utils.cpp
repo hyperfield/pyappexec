@@ -1,5 +1,6 @@
 #include "Utils.hpp"
 #include <array>
+#include <cstdlib>
 #if defined(__has_include)
 #  if __has_include(<boost/process/v1.hpp>)
 #    define PYAPPEXEC_USE_BOOST_PROCESS_V1 1
@@ -308,7 +309,7 @@ std::string Utils::getFileNameFromUrl(const std::string& url) {
 }
 
 
-std::string Utils::runAndCaptureOutput(const std::string& cmd, bool captureStderr = false) {
+std::string Utils::runAndCaptureOutput(const std::string& cmd, bool captureStderr) {
     std::ostringstream output;
     bp::ipstream outStream;
 
@@ -384,6 +385,7 @@ bool Utils::isMacOS() {
 
 int Utils::runCommand(const std::string& command, bool require_admin)
 {
+    (void)require_admin; // admin elevation not implemented; reserved for future use
 #ifdef _WIN32
     return std::system(command.c_str());
 #else

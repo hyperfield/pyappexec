@@ -11,6 +11,7 @@ struct SettingsModel
     QString appName;
     QString executableName;
     QString iconPath;
+    QString appId;
     bool hideGuiAfterSuccess{false};
 
     QString executableFileName() const;

@@ -87,7 +87,9 @@ To build the launcher you need:
 
 ### Build
 
-On Linux, install the toolchain and development headers via your package manager before running CMake. Example commands:
+#### Linux
+
+Install the toolchain and development headers via your package manager before running CMake. Example commands:
 
 - **Debian-based (Ubuntu, Mint, Pop!\_OS):**
 
@@ -109,33 +111,47 @@ On Linux, install the toolchain and development headers via your package manager
   sudo pacman -S --needed base-devel cmake pkgconf glib2 qt6-base spdlog boost curl
   ```
 
-- **Windows (MSVC + vcpkg):**
-
-  1. Install [Visual Studio 2022](https://visualstudio.microsoft.com/downloads/) (Desktop development with C++) or the standalone Build Tools so `cl.exe`, the Windows SDK, and CMake integration are available.
-  2. Bootstrap [vcpkg](https://github.com/microsoft/vcpkg) and install the dependencies:
-     ```powershell
-     git clone https://github.com/microsoft/vcpkg.git C:\dev\vcpkg
-     C:\dev\vcpkg\bootstrap-vcpkg.bat
-     C:\dev\vcpkg\vcpkg.exe install qtbase:x64-windows spdlog:x64-windows
-     ```
-  3. Configure the project from a “x64 Native Tools Command Prompt for VS” (or Developer PowerShell) so MSVC is on `PATH`:
-     ```powershell
-     cmake -S . -B build `
-           -DCMAKE_BUILD_TYPE=Release `
-           -DCMAKE_TOOLCHAIN_FILE=C:/dev/vcpkg/scripts/buildsystems/vcpkg.cmake `
-           -DVCPKG_TARGET_TRIPLET=x64-windows
-     cmake --build build --parallel
-     ```
-     > If CMake still complains that `Qt6 was not found`, confirm that `qtbase:x64-windows` was installed and that the same vcpkg root is passed via `CMAKE_TOOLCHAIN_FILE`. Setting `VCPKG_ROOT=C:\dev\vcpkg` globally also works.
+After installing the dependencies, build with:
 
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --parallel
 ```
 
-The build step generates `resources.c` from `resources/resources.xml` using `glib-compile-resources`. Ensure that tool is discoverable on your `PATH`.
+#### macOS (Homebrew)
 
-> **macOS workflow:** Install the dependencies via `brew install glib libffi zlib boost qt spdlog` (Boost supplies `<boost/process.hpp>` and Qt6 supplies the GUI). Homebrew's `pkg-config` should expose `gio-2.0` after those installs; if it does not, export `PKG_CONFIG_PATH="/opt/homebrew/opt/libffi/lib/pkgconfig:/opt/homebrew/lib/pkgconfig:/opt/homebrew/share/pkgconfig:$PKG_CONFIG_PATH"` (adjust the prefixes if needed) and rerun `pkg-config --modversion gio-2.0` to confirm it resolves to the Homebrew install. You can run `scripts/build_macos.sh` to apply the environment tweaks automatically and execute `cmake -S … && cmake --build …` in one step.
+1. Install the dependencies:
+   ```bash
+   brew install glib libffi zlib boost qt spdlog
+   ```
+   Homebrew's `pkg-config` should expose `gio-2.0` after those installs; if it does not, export `PKG_CONFIG_PATH="/opt/homebrew/opt/libffi/lib/pkgconfig:/opt/homebrew/lib/pkgconfig:/opt/homebrew/share/pkgconfig:$PKG_CONFIG_PATH"` (adjust the prefixes if needed) and rerun `pkg-config --modversion gio-2.0` to confirm it resolves to the Homebrew install.
+2. Build:
+   ```bash
+   cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+   cmake --build build --parallel
+   ```
+   Or run `scripts/build_macos.sh` to apply the `PKG_CONFIG_PATH` tweak automatically and build in one step.
+
+#### Windows (MSVC + vcpkg)
+
+1. Install [Visual Studio 2022](https://visualstudio.microsoft.com/downloads/) (Desktop development with C++) or the standalone Build Tools so `cl.exe`, the Windows SDK, and CMake integration are available.
+2. Bootstrap [vcpkg](https://github.com/microsoft/vcpkg) and install the dependencies:
+   ```powershell
+   git clone https://github.com/microsoft/vcpkg.git C:\dev\vcpkg
+   C:\dev\vcpkg\bootstrap-vcpkg.bat
+   C:\dev\vcpkg\vcpkg.exe install qtbase:x64-windows spdlog:x64-windows
+   ```
+3. Configure the project from a “x64 Native Tools Command Prompt for VS” (or Developer PowerShell) so MSVC is on `PATH`:
+   ```powershell
+   cmake -S . -B build `
+         -DCMAKE_BUILD_TYPE=Release `
+         -DCMAKE_TOOLCHAIN_FILE=C:/dev/vcpkg/scripts/buildsystems/vcpkg.cmake `
+         -DVCPKG_TARGET_TRIPLET=x64-windows
+   cmake --build build --parallel
+   ```
+   > If CMake still complains that `Qt6 was not found`, confirm that `qtbase:x64-windows` was installed and that the same vcpkg root is passed via `CMAKE_TOOLCHAIN_FILE`. Setting `VCPKG_ROOT=C:\dev\vcpkg` globally also works.
+
+The build step generates `resources.c` from `resources/resources.xml` using `glib-compile-resources`. Ensure that tool is discoverable on your `PATH`.
 
 Use `-DBUILD_LAUNCHER=OFF` or `-DBUILD_INSTALLER=OFF` to selectively build the CLI/GUI launcher or the installer UI.
 
@@ -172,6 +188,7 @@ PyAppExec ships with an optional Qt-based installer that can scaffold a launcher
 
 - Run `./scripts/package_installer_app.sh` to produce `dist/PyAppExec_Installer.<version>.<arch>.app`. The script rebuilds the installer binary, converts the iconset under `resources/icons/macos/`, copies Qt frameworks/plugins via `macdeployqt`, and performs an ad-hoc `codesign` so the bundle launches without Gatekeeper warnings. Set `CODESIGN_IDENTITY` if you need to sign with a real certificate.
 - Distribute `PyAppExec_Installer…app` directly to customers. When they launch it, they can browse to their Python project, (optionally) supply an icon, and the installer will drop the PyAppExec launcher + `pyappexec.ini` alongside the project, ready for redistribution on Linux, Windows, or macOS.
+- On macOS/Linux, the installer also drops a `reset_pyappexec.command`/`reset_pyappexec.sh` helper next to the INI/launcher; it removes the managed virtual environment defined in `pyappexec.ini`.
 
 ### Quick start (bundling your Python app)
 
@@ -193,16 +210,20 @@ PyAppExec is driven entirely by `pyappexec.ini`. Each operating system gets its 
 | --- | --- | --- |
 | `python_download_url` | no | URL you can surface to users if you need to link to an installer. The launcher does not download Python automatically from this URL but exposes it for logging and UX hooks. |
 | `python_min_ver` | yes | Minimum acceptable Python version (for example `3.10`). |
+| `app_id` | yes | Stable identifier (6–20 alphanumeric characters) used to scope per-app caches/virtualenvs. Keep this consistent across platforms. |
+| `config_root` | no | Root directory for cached state/venv. Defaults per-OS to a user data path (`~/Library/Application Support/PyAppExec/<app_id>` on macOS, `$XDG_DATA_HOME/pyappexec/<app_id>` or `~/.local/share/pyappexec/<app_id>` on Linux, `%LOCALAPPDATA%\\PyAppExec\\<app_id>` on Windows). |
 | `python_app_dir` | no | Directory that contains your Python project. Defaults to the INI file's directory. |
 | `exec_app_path` | yes | Entry-point script relative to `python_app_dir`, usually your `main.py`. |
 | `exec_app_args` | no | Extra command-line arguments appended after the entry script. Quote values with spaces (`"--flag value"`). |
 | `exec_env` | no | Semicolon-separated list of `KEY=VALUE` pairs that override environment variables for the launched app. |
 | `requirements_file` | no | Relative path to the Python requirements file. If omitted, Python dependency installation is skipped. |
-| `virtual_env_dir` | no | Directory to create the virtual environment in (relative to `python_app_dir`). Defaults to `.venv`. |
+| `virtual_env_dir` | no | Directory to create the virtual environment in. If empty, defaults to `<config_root>/venv`. If relative, it is resolved against `python_app_dir`. |
 | `GUI` | no | `true` to launch the Qt front-end; `false` to stay purely CLI. Users can also pass `--no-gui` at runtime to force CLI regardless of config. |
 | `GUI_HIDE_AFTER_SUCCESS` | no | `true` to automatically set the “hide GUI after successful runs” preference once a run succeeds. |
 | `log_console` | no | `true` (default) to emit logs to stdout/stderr, `false` to silence console output (the GUI still captures logs internally). |
 | `log_level` | no | Minimum severity for console logs. Supports `trace`, `debug`, `info`, `warn`, `error`, `critical`, `off`. |
+
+The GUI installer auto-generates a valid `app_id` for you; override it if you want a specific identifier shared across platforms or releases.
 
 Example: `exec_env = APP_ENV=production;LOG_LEVEL="info"` injects two variables, while `exec_app_args = --profile default --no-telemetry` adds both flags after the entry script.
 
