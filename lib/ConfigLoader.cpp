@@ -105,9 +105,41 @@ std::filesystem::path ConfigLoader::resolveConfigPath(const std::optional<std::s
         "Pass --config /path/to/pyappexec.ini to specify the configuration explicitly.");
 }
 
-std::filesystem::path ConfigLoader::guiPreferenceFile() const
+namespace {
+
+std::filesystem::path resolveConfigRoot(const SpecConfig& specConfig,
+                                        const std::filesystem::path& configDir)
 {
-    return configPath_.parent_path() / ".pyappexec_gui_pref";
+    std::string mainSection = AppBootstrapper::getOSPrefix() + ":main";
+    std::string appId = specConfig.get_value(mainSection, "app_id", false);
+    if (appId.empty()) {
+        appId = "pyappexec";
+    }
+
+    std::string configRootValue = specConfig.get_value(mainSection, "config_root", false);
+    if (!configRootValue.empty()) {
+        std::filesystem::path candidate(configRootValue);
+        if (!candidate.is_absolute()) {
+            candidate = configDir / candidate;
+        }
+        std::error_code ec;
+        auto normalized = std::filesystem::weakly_canonical(candidate, ec);
+        return ec ? candidate.lexically_normal() : normalized;
+    }
+
+    return AppBootstrapper::defaultConfigRoot(appId);
+}
+
+} // namespace
+
+std::filesystem::path ConfigLoader::guiPreferenceFile(const SpecConfig& specConfig) const
+{
+    const std::filesystem::path configDir = configPath_.parent_path();
+    std::filesystem::path root = resolveConfigRoot(specConfig, configDir);
+    if (root.empty()) {
+        return configDir / ".pyappexec_gui_pref";
+    }
+    return root / ".pyappexec_gui_pref";
 }
 
 std::string ConfigLoader::determineAppDisplayName(const SpecConfig& specConfig) const

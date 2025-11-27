@@ -61,6 +61,8 @@ public:
     bool requiresProvisioning() const;
     static std::string getOSPrefix();
     static bool parseBool(const std::string& value, bool fallback);
+    static std::filesystem::path defaultConfigRoot(const std::string& appId);
+    static std::string sanitizeIdForPath(const std::string& appId);
 
     std::string getPythonDownloadUrl();
     std::vector<Requirement> getRequirements();
@@ -69,8 +71,6 @@ public:
 
 private:
     static std::string expandEnvironmentVariables(const std::string& value);
-    static std::filesystem::path defaultConfigRoot(const std::string& appId);
-    static std::string sanitizeIdForPath(const std::string& appId);
 
     PythonManager python;
     SpecConfig specConfig;

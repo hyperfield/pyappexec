@@ -1,8 +1,12 @@
 #include "Logger.hpp"
 
 #include <algorithm>
+#include <filesystem>
 #include <unordered_map>
+#include <spdlog/sinks/dist_sink.h>
 #include <spdlog/sinks/null_sink.h>
+// cppcheck-suppress missingIncludeSystem
+#include <spdlog/sinks/rotating_file_sink.h>
 // cppcheck-suppress missingIncludeSystem
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/spdlog.h>
@@ -11,32 +15,42 @@ namespace Logger {
 
 void initialize()
 {
-    if (spdlog::default_logger()) {
-        return;
+    if (!spdlog::default_logger()) {
+        configure(true, spdlog::level::info, std::string{});
     }
-
-    auto console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
-    console_sink->set_pattern("[%H:%M:%S] [%^%l%$] %v");
-
-    auto logger = std::make_shared<spdlog::logger>("pyappexec", console_sink);
-    spdlog::set_default_logger(logger);
-    spdlog::set_level(spdlog::level::info);
-    spdlog::flush_on(spdlog::level::info);
 }
 
-void configure(bool enableConsole, spdlog::level::level_enum level)
+void configure(bool enableConsole, spdlog::level::level_enum level, const std::string& filePath)
 {
-    std::shared_ptr<spdlog::logger> logger;
+    auto distSink = std::make_shared<spdlog::sinks::dist_sink_mt>();
 
     if (enableConsole) {
         auto sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
         sink->set_pattern("[%H:%M:%S] [%^%l%$] %v");
-        logger = std::make_shared<spdlog::logger>("pyappexec", sink);
-    } else {
-        auto sink = std::make_shared<spdlog::sinks::null_sink_mt>();
-        logger = std::make_shared<spdlog::logger>("pyappexec", sink);
+        distSink->add_sink(sink);
     }
 
+    if (!filePath.empty()) {
+        std::error_code ec;
+        std::filesystem::path logPath(filePath);
+        std::filesystem::path dir = logPath.parent_path();
+        if (!dir.empty()) {
+            std::filesystem::create_directories(dir, ec);
+        }
+
+        auto fileSink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
+            filePath,
+            5 * 1024 * 1024, // 5 MB per file
+            3);              // keep 3 files
+        fileSink->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%l] %v");
+        distSink->add_sink(fileSink);
+    }
+
+    if (distSink->sinks().empty()) {
+        distSink->add_sink(std::make_shared<spdlog::sinks::null_sink_mt>());
+    }
+
+    auto logger = std::make_shared<spdlog::logger>("pyappexec", distSink);
     spdlog::set_default_logger(logger);
     spdlog::set_level(level);
     spdlog::flush_on(level);

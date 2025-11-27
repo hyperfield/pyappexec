@@ -66,6 +66,10 @@ void writeGuiPreference(const std::filesystem::path& file, bool suppress)
     }
 
     if (suppress) {
+        if (!file.parent_path().empty()) {
+            std::error_code ec;
+            std::filesystem::create_directories(file.parent_path(), ec);
+        }
         std::ofstream out(file, std::ios::trunc);
         if (out) {
             out << "suppress_gui=1\n";
@@ -149,7 +153,7 @@ int Launcher::run(const CliOptions& options,
     AppBootstrapper appBootstrapper(specConfig);
 
     std::string appDisplayName = loader.determineAppDisplayName(specConfig);
-    std::filesystem::path guiPreferenceFile = loader.guiPreferenceFile();
+    std::filesystem::path guiPreferenceFile = loader.guiPreferenceFile(specConfig);
     if (options.resetGuiPreference) {
         writeGuiPreference(guiPreferenceFile, false);
     }

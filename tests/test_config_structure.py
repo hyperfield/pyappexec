@@ -6,9 +6,7 @@ from __future__ import annotations
 import configparser
 import sys
 from pathlib import Path
-
-ROOT = Path(__file__).resolve().parents[1]
-INI_PATH = ROOT / "test2" / "pyappexec.ini"
+import tempfile
 
 
 def fail(message: str) -> None:
@@ -21,7 +19,6 @@ def pass_msg(message: str) -> None:
 
 def load_config() -> configparser.ConfigParser:
     parser = configparser.ConfigParser()
-    parser.read(INI_PATH)
     return parser
 
 
@@ -102,19 +99,82 @@ def validate_requirements_section(os_name: str, parser: configparser.ConfigParse
     return errors
 
 
+def write_sample_config(base_dir: Path) -> Path:
+    app_dir = base_dir / "sample_app"
+    app_dir.mkdir(parents=True, exist_ok=True)
+    (app_dir / "main.py").write_text("print('hello')\n", encoding="utf-8")
+    (app_dir / "requirements.txt").write_text("# sample\n", encoding="utf-8")
+
+    ini_path = base_dir / "pyappexec.ini"
+    template = """\
+[Linux:main]
+python_download_url =
+python_min_ver = 3.10
+app_id = TESTAPP
+config_root =
+python_app_dir = sample_app
+exec_app_path = main.py
+requirements_file = requirements.txt
+virtual_env_dir = venv
+GUI = true
+log_console = true
+log_level = info
+
+[Linux:requirements]
+requirement_1 = SampleRequirement
+requirement_1_url =
+
+[Windows:main]
+python_download_url =
+python_min_ver = 3.10
+app_id = TESTAPP
+config_root =
+python_app_dir = sample_app
+exec_app_path = main.py
+requirements_file = requirements.txt
+virtual_env_dir = venv
+GUI = true
+log_console = true
+log_level = info
+
+[Windows:requirements]
+requirement_1 = SampleRequirement
+requirement_1_url =
+
+[MacOS:main]
+python_download_url =
+python_min_ver = 3.10
+app_id = TESTAPP
+config_root =
+python_app_dir = sample_app
+exec_app_path = main.py
+requirements_file = requirements.txt
+virtual_env_dir = venv
+GUI = true
+log_console = true
+log_level = info
+
+[MacOS:requirements]
+requirement_1 = SampleRequirement
+requirement_1_url =
+"""
+    ini_path.write_text(template, encoding="utf-8")
+    return ini_path
+
+
 def validate() -> int:
-    if not INI_PATH.exists():
-        fail(f"Missing configuration file: {INI_PATH}")
-        return 1
-
-    parser = load_config()
     errors = 0
-    config_dir = INI_PATH.parent
-    os_families = ["Linux", "Windows", "MacOS"]
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        ini_path = write_sample_config(tmp_path)
+        parser = load_config()
+        parser.read(ini_path)
+        config_dir = ini_path.parent
+        os_families = ["Linux", "Windows", "MacOS"]
 
-    for os_name in os_families:
-        errors += validate_main_section(os_name, parser, config_dir)
-        errors += validate_requirements_section(os_name, parser)
+        for os_name in os_families:
+            errors += validate_main_section(os_name, parser, config_dir)
+            errors += validate_requirements_section(os_name, parser)
 
     if errors == 0:
         pass_msg("pyappexec.ini structure looks good")

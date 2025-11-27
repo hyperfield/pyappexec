@@ -12,7 +12,7 @@ public:
 
     SpecConfig load();
     const std::filesystem::path& configPath() const { return configPath_; }
-    std::filesystem::path guiPreferenceFile() const;
+    std::filesystem::path guiPreferenceFile(const SpecConfig& specConfig) const;
     std::string determineAppDisplayName(const SpecConfig& specConfig) const;
     std::filesystem::path resolveAppRelativePath(const std::filesystem::path& pythonAppDir,
                                                  const std::string& entry) const;

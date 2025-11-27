@@ -14,6 +14,12 @@ TEST_SCRIPTS = [
     "tests/test_config_structure.py",
     "tests/test_readthedocs_structure.py",
     "tests/test_build_config.py",
+    "tests/test_logger_paths.py",
+    "tests/test_config_loader_logic.py",
+    "tests/test_env_and_requirements.py",
+    "tests/test_gui_preference_state.py",
+    "tests/test_launcher_help.py",
+    "tests/test_provisioning_flow.py",
 ]
 
 

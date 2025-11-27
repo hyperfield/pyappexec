@@ -5,7 +5,8 @@ Param(
     [string]$VcpkgRoot = $env:VCPKG_ROOT,
     [switch]$Clean,
     [string]$Arch = "amd64",
-    [string]$HostArch = "amd64"
+    [string]$HostArch = "amd64",
+    [int]$Parallel = 0
 )
 
 $ErrorActionPreference = "Stop"
@@ -130,7 +131,16 @@ $configureCmd = @(
     "-DVCPKG_TARGET_TRIPLET=$Triplet"
 ) -join " "
 
-$buildCmd = "cmake --build `"$buildPath`" --config $Configuration"
+function Get-ParallelJobs {
+    param([int]$Requested)
+    if ($Requested -gt 0) { return $Requested }
+    $count = [int]$env:NUMBER_OF_PROCESSORS
+    if ($count -lt 1) { $count = 1 }
+    return $count
+}
+
+$parallelJobs = Get-ParallelJobs -Requested $Parallel
+$buildCmd = "cmake --build `"$buildPath`" --config $Configuration --parallel $parallelJobs"
 
 Invoke-WithVsDevEnv -Command $configureCmd
 Invoke-WithVsDevEnv -Command $buildCmd

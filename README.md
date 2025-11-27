@@ -163,7 +163,7 @@ After building, run the launcher from the project root:
 ./build/pyappexec
 ```
 
-PyAppExec first looks for `pyappexec.ini` in the current directory; if it is not found, it scans each immediate subdirectory (this is how the sample config in `test2/pyappexec.ini` is discovered). To point at a specific file explicitly, pass `--config /path/to/pyappexec.ini`.
+PyAppExec first looks for `pyappexec.ini` in the current directory; if it is not found, it scans each immediate subdirectory. To point at a specific file explicitly, pass `--config /path/to/pyappexec.ini`.
 
 On macOS, if you distribute PyAppExec inside an `.app` bundle, launch flags (for example `--reset-gui`) only work when you either run the embedded binary directly (`Your.app/Contents/MacOS/YourBinary --reset-gui`) or insert `--args` when using Finder/`open` (`open Your.app --args --reset-gui`). Anything after the `.app` path without `--args` is treated as a document, so PyAppExec never sees the flag.
 
@@ -193,7 +193,7 @@ PyAppExec ships with an optional Qt-based installer that can scaffold a launcher
 
 ### Quick start (bundling your Python app)
 
-1. Copy your built `pyappexec` binary and a tailored `pyappexec.ini` into the root of the Python application you plan to ship (the repo’s `test2/pyappexec.ini` shows the recommended layout where every path is relative to the INI). Rename the binary to match your product if you like.
+1. Copy your built `pyappexec` binary and a tailored `pyappexec.ini` into the root of the Python application you plan to ship (the repo’s `pyappexec.ini` shows the recommended layout where every path is relative to the INI). Rename the binary to match your product if you like.
 2. Run the launcher once from that directory to ensure the virtual environment, `distrib/` downloads, and GUI suppression preference behave as expected. Remove any temporary `distrib/` artifacts you don’t plan to prebundle.
 3. Include a short README/release note in your distribution that states the app is bootstrapped by PyAppExec and links to https://github.com/quicknode-labs/PyAppExec for attribution and support.
 
@@ -203,11 +203,12 @@ Set `GUI = true` under the relevant `[<OS>:main]` section to launch the Qt6 fron
 
 **Logging**
 - `log_console` and `log_level` in `[<OS>:main]` control console output; the GUI always captures stdout/stderr internally.
+- The launcher also writes rotating logs (5 MB x 3 files) under the user's log directory: `%LOCALAPPDATA%\PyAppExec\logs\pyappexec.log` on Windows, `~/Library/Logs/PyAppExec/pyappexec.log` on macOS, and `$XDG_STATE_HOME/pyappexec/pyappexec.log` or `~/.local/state/pyappexec/pyappexec.log` on Linux.
 - The GUI writes its combined output to a log file next to `pyappexec.ini` named `.pyappexec_gui.log`. If you bundle PyAppExec into a macOS `.app`, the log lives inside the bundle at `Your.app/Contents/MacOS/.pyappexec_gui.log` unless you relocate it. For CLI runs, redirect stdout/stderr as desired.
 
 ## Configuration
 
-PyAppExec is driven entirely by `pyappexec.ini`. Each operating system gets its own pair of sections: `[Linux:main]` and `[Linux:requirements]`, `[Windows:main]` and `[Windows:requirements]`, and so on. Keep the INI alongside your Python application (like the sample `test2/pyappexec.ini`) so relative paths resolve naturally; PyAppExec automatically discovers it when launched from the project root.
+PyAppExec is driven entirely by `pyappexec.ini`. Each operating system gets its own pair of sections: `[Linux:main]` and `[Linux:requirements]`, `[Windows:main]` and `[Windows:requirements]`, and so on. Keep the INI alongside your Python application (like the sample `pyappexec.ini`) so relative paths resolve naturally; PyAppExec automatically discovers it when launched from the project root.
 
 ### Main section
 
@@ -312,7 +313,7 @@ requirement_1_cmd_params = /S /quiet
 
 On Windows, optional `cmd_params` can be supplied to run silent installers.
 
-A macOS profile follows the same pattern with `[MacOS:main]` and `[MacOS:requirements]` sections; the sample `test2/pyappexec.ini` shows how to point those entries at the same application while using a platform-appropriate Python installer URL and Homebrew-based FFmpeg installation command.
+A macOS profile follows the same pattern with `[MacOS:main]` and `[MacOS:requirements]` sections; the sample `pyappexec.ini` shows how to point those entries at the same application while using a platform-appropriate Python installer URL and Homebrew-based FFmpeg installation command.
 
 ### Working with `pyproject.toml`, Poetry, Pipenv, uv, etc.
 
@@ -335,8 +336,6 @@ The `test/` directory contains the open-source YT Channel Downloader project as 
 1. Build PyAppExec.
 2. Ensure `ffmpeg` is installed or let the Linux configuration install it for you.
 3. Run `./build/pyappexec` from the repository root. The launcher will set up a virtual environment under `test/.pyappexec-venv`, install Python dependencies from `test/requirements.txt`, and start the PyQt application defined in `test/main.py`.
-
-You can swap out the `test2/` directory with your own Python app by updating `pyappexec.ini`.
 
 ## Read the Docs site
 

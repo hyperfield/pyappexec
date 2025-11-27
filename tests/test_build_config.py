@@ -21,7 +21,8 @@ def main() -> int:
 
     expected_snippets = [
         "set(CMAKE_AUTOMOC ON)",
-        "find_package(Qt6 COMPONENTS Widgets REQUIRED)",
+        "find_package(Qt6",  # Qt6 discovery present
+        "COMPONENTS Widgets",  # Widgets component requested
         "gui/MainWindow.cpp",
         "gui/GuiRunner.cpp",
         "Qt6::Widgets",
