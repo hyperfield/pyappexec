@@ -16,10 +16,7 @@ public:
                  QString* errorMessage,
                  bool createBundle,
                  bool writeIni) const;
-
-#if defined(Q_OS_WIN)
     bool uninstall(const SettingsModel& settings, QString* errorMessage) const;
-#endif
 };
 
 } // namespace installer

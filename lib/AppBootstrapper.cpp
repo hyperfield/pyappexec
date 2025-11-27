@@ -14,6 +14,9 @@
 #else
 #  include <boost/process.hpp>
 #endif
+#if defined(_WIN32)
+#  include <boost/process/v1/detail/handler_base.hpp>
+#endif
 #include <cstdlib>
 #include <system_error>
 #include <cctype>
@@ -27,6 +30,8 @@
 #include <tuple>
 #include <sstream>
 #include <vector>
+#include <thread>
+#include <functional>
 #include <spdlog/spdlog.h>
 
 namespace fs = std::filesystem;
@@ -35,7 +40,22 @@ namespace bp = boost::process::v1;
 #else
 namespace bp = boost::process;
 #endif
+
 #undef PYAPPEXEC_USE_BOOST_PROCESS_V1
+
+#if defined(_WIN32)
+struct HideConsole : bp::detail::handler_base {
+    template <typename Executor>
+    void on_setup(Executor& exec) const {
+        exec.creation_flags |= CREATE_NO_WINDOW;
+        exec.startup_info.dwFlags |= STARTF_USESHOWWINDOW;
+        exec.startup_info.wShowWindow = SW_HIDE;
+    }
+};
+#  define BP_WIN_HIDE_ARGS , HideConsole{}
+#else
+#  define BP_WIN_HIDE_ARGS
+#endif
 
 namespace {
 const char kPathSeparator =
@@ -85,6 +105,60 @@ std::string trimCopy(const std::string& input) {
     trimmed.erase(std::find_if(trimmed.rbegin(), trimmed.rend(), notSpace).base(), trimmed.end());
 
     return trimmed;
+}
+
+int runProcessWithLogging(const std::filesystem::path& executable,
+                          const std::vector<std::string>& args,
+                          const std::filesystem::path& workingDir,
+                          const std::string& action,
+                          const bp::environment* customEnv = nullptr)
+{
+    bp::ipstream outStream;
+    bp::ipstream errStream;
+
+    auto logStream = [&](bp::ipstream& stream, bool isError) {
+        std::string line;
+        while (std::getline(stream, line)) {
+            if (!line.empty() && line.back() == '\r') {
+                line.pop_back();
+            }
+            if (isError) {
+                spdlog::warn("{}: {}", action, line);
+            } else {
+                spdlog::info("{}: {}", action, line);
+            }
+        }
+    };
+
+    try {
+        bp::environment env = customEnv ? *customEnv : boost::this_process::environment();
+        if (env.find("PYTHONUNBUFFERED") == env.end()) {
+            env["PYTHONUNBUFFERED"] = "1";
+        }
+
+        bp::child process(
+            bp::exe = executable.string(),
+            bp::args = args,
+            bp::start_dir = workingDir.string(),
+            bp::env = env,
+            bp::std_out > outStream,
+            bp::std_err > errStream,
+            bp::std_in < bp::null
+            BP_WIN_HIDE_ARGS);
+
+        std::thread outThread(logStream, std::ref(outStream), false);
+        std::thread errThread(logStream, std::ref(errStream), true);
+
+        process.wait();
+
+        outThread.join();
+        errThread.join();
+
+        return process.exit_code();
+    } catch (const std::exception& err) {
+        spdlog::error("Failed to {}: {}", action, err.what());
+        return -1;
+    }
 }
 }
 
@@ -417,15 +491,14 @@ bool AppBootstrapper::setupVirtualEnv()
                      pythonCmd, virtual_env_path.string());
 
         std::vector<std::string> args{"-m", "venv", virtual_env_path.string()};
-        bp::child process(
-            bp::exe = pythonCmd,
-            bp::args = args,
-            bp::start_dir = python_app_dir.string()
-        );
-        process.wait();
-        if (process.exit_code() != 0) {
+        int exitCode = runProcessWithLogging(
+            fs::path(pythonCmd),
+            args,
+            python_app_dir,
+            "create virtual environment");
+        if (exitCode != 0) {
             spdlog::error("Virtual environment creation failed with exit code {}",
-                          process.exit_code());
+                          exitCode);
             return false;
         }
 
@@ -520,15 +593,14 @@ bool AppBootstrapper::launchPythonApp()
             env["PATH"] = pathEnv;
         }
 
-        bp::child process(
-            bp::exe = pythonExecutable.string(),
-            bp::args = args,
-            bp::start_dir = python_app_dir.string(),
-            bp::env = env
-        );
-        process.wait();
-        if (process.exit_code() != 0) {
-            spdlog::error("Python application exited with code {}", process.exit_code());
+        int exitCode = runProcessWithLogging(
+            pythonExecutable,
+            args,
+            python_app_dir,
+            "run Python application",
+            &env);
+        if (exitCode != 0) {
+            spdlog::error("Python application exited with code {}", exitCode);
             return false;
         }
     } catch (const std::exception& err) {
@@ -653,7 +725,26 @@ bool AppBootstrapper::installRequirements()
                     << "$fp=Get-ChildItem -Path $dest -Filter 'ffprobe.exe' -Recurse -File | Select-Object -First 1;"
                     << "if($fp){Copy-Item $fp.FullName -Destination (Join-Path $dest 'ffprobe.exe') -Force};"
                     << "\"";
+#ifdef _WIN32
+                std::vector<std::string> psArgs{
+                    "-ExecutionPolicy", "Bypass",
+                    "-Command", cmd.str()
+                };
+                try {
+                    bp::child ps(
+                        bp::exe = "powershell",
+                        bp::args = psArgs,
+                        bp::start_dir = destDir.string()
+                        BP_WIN_HIDE_ARGS);
+                    ps.wait();
+                    handled = ps.exit_code() == 0;
+                } catch (const std::exception& err) {
+                    spdlog::error("Failed to extract {}: {}", req.name, err.what());
+                    handled = false;
+                }
+#else
                 handled = runCommand(cmd.str());
+#endif
                 if (!handled) {
                     success = false;
                     break;
@@ -930,21 +1021,16 @@ bool AppBootstrapper::runPythonInVirtualEnv(
     const std::vector<std::string>& args,
     const std::string& action) const
 {
-    try {
-        bp::child process(
-            bp::exe = pythonExecutable.string(),
-            bp::args = args,
-            bp::start_dir = python_app_dir.string());
-        process.wait();
-        if (process.exit_code() != 0) {
-            spdlog::error("Failed to {} (exit code {}).", action, process.exit_code());
-            return false;
-        }
-        return true;
-    } catch (const std::exception& err) {
-        spdlog::error("Failed to {}: {}", action, err.what());
+    int exitCode = runProcessWithLogging(
+        pythonExecutable,
+        args,
+        python_app_dir,
+        action);
+    if (exitCode != 0) {
+        spdlog::error("Failed to {} (exit code {}).", action, exitCode);
         return false;
     }
+    return true;
 }
 
 #if defined(__linux__)

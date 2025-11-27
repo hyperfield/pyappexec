@@ -110,12 +110,7 @@ InstallerWindow::InstallerWindow(QWidget* parent) : QMainWindow(parent)
     uninstallButton_->setFixedWidth(220);
     layout->addWidget(uninstallButton_, 0, Qt::AlignHCenter);
     connect(uninstallButton_, &QPushButton::clicked, this, &InstallerWindow::handleUninstall);
-#if !defined(Q_OS_WIN)
     uninstallButton_->setEnabled(false);
-    uninstallButton_->setToolTip(tr("Uninstall helper is available on Windows only."));
-#else
-    uninstallButton_->setEnabled(false);
-#endif
 
 #if defined(Q_OS_MAC)
     createBundleButton_ = new QPushButton(tr("Create macOS .app bundle"), central);
@@ -304,7 +299,6 @@ void InstallerWindow::handleInstall()
 
 void InstallerWindow::handleUninstall()
 {
-#if defined(Q_OS_WIN)
     SettingsModel settings = gatherSettings();
     if (settings.projectPath.isEmpty()) {
         QMessageBox::warning(this, tr("Missing information"), tr("Select a Python project directory to uninstall from."));
@@ -331,9 +325,6 @@ void InstallerWindow::handleUninstall()
     logMessage(tr("Uninstall completed for %1").arg(settings.projectPath));
     QMessageBox::information(this, tr("Success"), tr("PyAppExec was uninstalled."));
     updateActionButtons();
-#else
-    QMessageBox::information(this, tr("Not supported"), tr("Uninstall helper is currently Windows-only."));
-#endif
 }
 
 void InstallerWindow::handleCreateBundle()

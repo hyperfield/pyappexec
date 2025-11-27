@@ -13,6 +13,9 @@
 #else
 #  include <boost/process.hpp>
 #endif
+#if defined(_WIN32)
+#  include <boost/process/v1/detail/handler_base.hpp>
+#endif
 // cppcheck-suppress missingIncludeSystem
 #include <filesystem>
 // cppcheck-suppress missingIncludeSystem
@@ -57,6 +60,20 @@ namespace bp = boost::process;
 #endif
 #undef PYAPPEXEC_USE_BOOST_PROCESS_V1
 
+#if defined(_WIN32)
+struct HideConsole : bp::detail::handler_base {
+    template <typename Executor>
+    void on_setup(Executor& exec) const {
+        exec.creation_flags |= CREATE_NO_WINDOW;
+        exec.startup_info.dwFlags |= STARTF_USESHOWWINDOW;
+        exec.startup_info.wShowWindow = SW_HIDE;
+    }
+};
+#  define BP_WIN_HIDE_ARGS , HideConsole{}
+#else
+#  define BP_WIN_HIDE_ARGS
+#endif
+
 
 std::string Utils::runPythonScriptFromResourceAndCaptureOutput(const std::string& script_name, const std::string& python_cmd)
 {
@@ -73,6 +90,7 @@ std::string Utils::runPythonScriptFromResourceAndCaptureOutput(const std::string
         bp::std_out > outStream,
         bp::std_in < inStream,
         bp::std_err > bp::null
+        BP_WIN_HIDE_ARGS
     );
 
     inStream.write(script.data(), script.size());
@@ -314,8 +332,8 @@ std::string Utils::runAndCaptureOutput(const std::string& cmd, bool captureStder
     bp::ipstream outStream;
 
     bp::child process = captureStderr
-        ? bp::child(cmd, bp::std_out > outStream, bp::std_err > outStream)
-        : bp::child(cmd, bp::std_out > outStream, bp::std_err > bp::null);
+        ? bp::child(cmd, bp::std_out > outStream, bp::std_err > outStream BP_WIN_HIDE_ARGS)
+        : bp::child(cmd, bp::std_out > outStream, bp::std_err > bp::null BP_WIN_HIDE_ARGS);
 
     std::string line;
     while (std::getline(outStream, line)) {

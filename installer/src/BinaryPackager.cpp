@@ -13,12 +13,10 @@
 #include <QObject>
 #include <QIODevice>
 #include <QProcess>
-#ifdef Q_OS_MAC
 #include <QChar>
 #include <QImage>
 #include <QStandardPaths>
 #include <QTemporaryDir>
-#endif
 #ifdef Q_OS_WIN
 #include <windows.h>
 #endif
@@ -62,7 +60,6 @@ QString launcherSourcePath()
     return {};
 }
 
-#ifdef Q_OS_WIN
 QString sanitizeAppId(const QString& appId)
 {
     QString cleaned;
@@ -80,7 +77,40 @@ QString sanitizeAppId(const QString& appId)
     }
     return cleaned;
 }
+
+QString defaultConfigRoot(const QString& appId)
+{
+    const QString sanitized = sanitizeAppId(appId);
+#if defined(Q_OS_WIN)
+    QString base = qEnvironmentVariable("LOCALAPPDATA");
+    if (base.isEmpty()) {
+        base = qEnvironmentVariable("APPDATA");
+    }
+    if (base.isEmpty()) {
+        base = QDir::currentPath();
+    }
+    return QDir(base).filePath(QStringLiteral("PyAppExec/%1").arg(sanitized));
+#elif defined(Q_OS_MAC)
+    QString home = qEnvironmentVariable("HOME");
+    if (home.isEmpty()) {
+        home = QDir::currentPath();
+    }
+    return QDir(home).filePath(QStringLiteral("Library/Application Support/PyAppExec/%1").arg(sanitized));
+#else
+    QString xdg = qEnvironmentVariable("XDG_DATA_HOME");
+    QString base;
+    if (!xdg.isEmpty()) {
+        base = xdg;
+    } else {
+        QString home = qEnvironmentVariable("HOME");
+        if (home.isEmpty()) {
+            home = QDir::currentPath();
+        }
+        base = QDir(home).filePath(QStringLiteral(".local/share"));
+    }
+    return QDir(base).filePath(QStringLiteral("pyappexec/%1").arg(sanitized));
 #endif
+}
 
 #if !defined(Q_OS_WIN)
 bool writeUninstallScript(const QString& scriptPath, const QString& sectionName, QString* errorMessage)
@@ -700,13 +730,14 @@ bool BinaryPackager::install(const SettingsModel& settings,
 
 } // namespace installer
 
-#if defined(Q_OS_WIN)
 bool installer::BinaryPackager::uninstall(const SettingsModel& settings, QString* errorMessage) const
 {
     QDir targetDir(settings.projectPath);
     if (!targetDir.exists()) {
         return true; // nothing to do
     }
+
+    const QString iniPath = targetDir.filePath(QStringLiteral("pyappexec.ini"));
 
     const QString launcherPath = targetDir.filePath(settings.executableFileName());
     if (QFile::exists(launcherPath) && !QFile::remove(launcherPath)) {
@@ -716,7 +747,19 @@ bool installer::BinaryPackager::uninstall(const SettingsModel& settings, QString
         return false;
     }
 
-    const QString iniPath = targetDir.filePath(QStringLiteral("pyappexec.ini"));
+#if defined(Q_OS_MAC)
+    const QString bundlePath = targetDir.filePath(settings.bundleName());
+    if (QFileInfo::exists(bundlePath)) {
+        QDir bundleDir(bundlePath);
+        if (!bundleDir.removeRecursively()) {
+            if (errorMessage) {
+                *errorMessage = QObject::tr("Failed to remove bundled app at %1").arg(bundlePath);
+            }
+            return false;
+        }
+    }
+#endif
+
     if (QFile::exists(iniPath) && !QFile::remove(iniPath)) {
         if (errorMessage) {
             *errorMessage = QObject::tr("Failed to remove %1").arg(iniPath);
@@ -724,6 +767,7 @@ bool installer::BinaryPackager::uninstall(const SettingsModel& settings, QString
         return false;
     }
 
+#if defined(Q_OS_WIN)
     const QString platformsDir = targetDir.filePath(QStringLiteral("platforms"));
     if (QDir(platformsDir).exists()) {
         if (!QDir(platformsDir).removeRecursively()) {
@@ -754,36 +798,34 @@ bool installer::BinaryPackager::uninstall(const SettingsModel& settings, QString
             }
         }
     }
+#endif
 
     // Remove the config directory associated with this app id
     QString appId = settings.appId.trimmed();
-    if (appId.isEmpty()) {
-        // Try to read from the installed INI if present
-        if (QFile::exists(iniPath)) {
-            QSettings ini(iniPath, QSettings::IniFormat);
-            const QString section = QStringLiteral("Windows:main");
-            if (ini.childGroups().contains(section)) {
-                ini.beginGroup(section);
-                const QString iniAppId = ini.value(QStringLiteral("app_id")).toString().trimmed();
-                if (!iniAppId.isEmpty()) {
-                    appId = iniAppId;
-                }
-                ini.endGroup();
-            }
-        }
-    }
-    const QString sanitizedId = sanitizeAppId(appId);
+    const QString section =
+#if defined(Q_OS_MAC)
+        QStringLiteral("MacOS:main");
+#elif defined(Q_OS_WIN)
+        QStringLiteral("Windows:main");
+#else
+        QStringLiteral("Linux:main");
+#endif
 
     QString configRoot;
     if (QFile::exists(iniPath)) {
         QSettings ini(iniPath, QSettings::IniFormat);
-        const QString section = QStringLiteral("Windows:main");
         if (ini.childGroups().contains(section)) {
             ini.beginGroup(section);
+            const QString iniAppId = ini.value(QStringLiteral("app_id")).toString().trimmed();
+            if (!iniAppId.isEmpty()) {
+                appId = iniAppId;
+            }
             configRoot = ini.value(QStringLiteral("config_root")).toString().trimmed();
             ini.endGroup();
         }
     }
+
+    const QString sanitizedId = sanitizeAppId(appId);
 
     QDir configDir;
     if (!configRoot.isEmpty()) {
@@ -794,14 +836,7 @@ bool installer::BinaryPackager::uninstall(const SettingsModel& settings, QString
             configDir = QDir(configRoot);
         }
     } else {
-        QString base = qEnvironmentVariable("LOCALAPPDATA");
-        if (base.isEmpty()) {
-            base = qEnvironmentVariable("APPDATA");
-        }
-        if (base.isEmpty()) {
-            base = QDir::currentPath();
-        }
-        configDir = QDir(QDir(base).filePath(QStringLiteral("PyAppExec/%1").arg(sanitizedId)));
+        configDir = QDir(defaultConfigRoot(sanitizedId));
     }
 
     if (configDir.exists()) {
@@ -815,4 +850,3 @@ bool installer::BinaryPackager::uninstall(const SettingsModel& settings, QString
 
     return true;
 }
-#endif
