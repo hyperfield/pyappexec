@@ -26,7 +26,8 @@ void configure(bool enableConsole, spdlog::level::level_enum level, const std::s
 
     if (enableConsole) {
         auto sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
-        sink->set_pattern("[%H:%M:%S] [%^%l%$] %v");
+        // For GUI/console output we don’t need the log level prefix.
+        sink->set_pattern("[%H:%M:%S] %v");
         distSink->add_sink(sink);
     }
 
