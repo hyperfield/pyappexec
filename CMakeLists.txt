@@ -198,6 +198,10 @@ if(BUILD_LAUNCHER)
     add_executable(pyappexec ${SOURCES})
     set_common_runtime_output(pyappexec)
 
+    if(WIN32)
+        set_target_properties(pyappexec PROPERTIES WIN32_EXECUTABLE TRUE)
+    endif()
+
     target_include_directories(pyappexec
         PRIVATE
             include

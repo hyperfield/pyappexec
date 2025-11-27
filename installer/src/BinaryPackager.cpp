@@ -7,6 +7,8 @@
 #include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
+#include <QSet>
+#include <QSettings>
 #include <QTextStream>
 #include <QObject>
 #include <QIODevice>
@@ -59,6 +61,26 @@ QString launcherSourcePath()
     }
     return {};
 }
+
+#ifdef Q_OS_WIN
+QString sanitizeAppId(const QString& appId)
+{
+    QString cleaned;
+    cleaned.reserve(appId.size());
+    for (QChar ch : appId) {
+        if (ch.isLetterOrNumber()) {
+            cleaned.append(ch);
+        }
+    }
+    if (cleaned.isEmpty()) {
+        cleaned = QStringLiteral("pyappexec");
+    }
+    if (cleaned.size() > 40) {
+        cleaned.truncate(40);
+    }
+    return cleaned;
+}
+#endif
 
 #if !defined(Q_OS_WIN)
 bool writeUninstallScript(const QString& scriptPath, const QString& sectionName, QString* errorMessage)
@@ -677,3 +699,120 @@ bool BinaryPackager::install(const SettingsModel& settings,
 }
 
 } // namespace installer
+
+#if defined(Q_OS_WIN)
+bool installer::BinaryPackager::uninstall(const SettingsModel& settings, QString* errorMessage) const
+{
+    QDir targetDir(settings.projectPath);
+    if (!targetDir.exists()) {
+        return true; // nothing to do
+    }
+
+    const QString launcherPath = targetDir.filePath(settings.executableFileName());
+    if (QFile::exists(launcherPath) && !QFile::remove(launcherPath)) {
+        if (errorMessage) {
+            *errorMessage = QObject::tr("Failed to remove launcher at %1").arg(launcherPath);
+        }
+        return false;
+    }
+
+    const QString iniPath = targetDir.filePath(QStringLiteral("pyappexec.ini"));
+    if (QFile::exists(iniPath) && !QFile::remove(iniPath)) {
+        if (errorMessage) {
+            *errorMessage = QObject::tr("Failed to remove %1").arg(iniPath);
+        }
+        return false;
+    }
+
+    const QString platformsDir = targetDir.filePath(QStringLiteral("platforms"));
+    if (QDir(platformsDir).exists()) {
+        if (!QDir(platformsDir).removeRecursively()) {
+            if (errorMessage) {
+                *errorMessage = QObject::tr("Failed to remove Qt platforms directory at %1").arg(platformsDir);
+            }
+            return false;
+        }
+    }
+
+    // Remove DLLs that we would have copied alongside the launcher
+    const QString sourceLauncher = launcherSourcePath();
+    if (!sourceLauncher.isEmpty()) {
+        const QString sourceDir = QFileInfo(sourceLauncher).absolutePath();
+        QSet<QString> dllNames;
+        QDirIterator dllIt(sourceDir, QStringList{QStringLiteral("*.dll")}, QDir::Files | QDir::NoSymLinks);
+        while (dllIt.hasNext()) {
+            dllIt.next();
+            dllNames.insert(dllIt.fileName().toLower());
+        }
+        for (const QString& dllName : dllNames) {
+            const QString destPath = targetDir.filePath(dllName);
+            if (QFile::exists(destPath) && !QFile::remove(destPath)) {
+                if (errorMessage) {
+                    *errorMessage = QObject::tr("Failed to remove %1").arg(destPath);
+                }
+                return false;
+            }
+        }
+    }
+
+    // Remove the config directory associated with this app id
+    QString appId = settings.appId.trimmed();
+    if (appId.isEmpty()) {
+        // Try to read from the installed INI if present
+        if (QFile::exists(iniPath)) {
+            QSettings ini(iniPath, QSettings::IniFormat);
+            const QString section = QStringLiteral("Windows:main");
+            if (ini.childGroups().contains(section)) {
+                ini.beginGroup(section);
+                const QString iniAppId = ini.value(QStringLiteral("app_id")).toString().trimmed();
+                if (!iniAppId.isEmpty()) {
+                    appId = iniAppId;
+                }
+                ini.endGroup();
+            }
+        }
+    }
+    const QString sanitizedId = sanitizeAppId(appId);
+
+    QString configRoot;
+    if (QFile::exists(iniPath)) {
+        QSettings ini(iniPath, QSettings::IniFormat);
+        const QString section = QStringLiteral("Windows:main");
+        if (ini.childGroups().contains(section)) {
+            ini.beginGroup(section);
+            configRoot = ini.value(QStringLiteral("config_root")).toString().trimmed();
+            ini.endGroup();
+        }
+    }
+
+    QDir configDir;
+    if (!configRoot.isEmpty()) {
+        QFileInfo info(configRoot);
+        if (info.isRelative()) {
+            configDir = QDir(targetDir.absoluteFilePath(configRoot));
+        } else {
+            configDir = QDir(configRoot);
+        }
+    } else {
+        QString base = qEnvironmentVariable("LOCALAPPDATA");
+        if (base.isEmpty()) {
+            base = qEnvironmentVariable("APPDATA");
+        }
+        if (base.isEmpty()) {
+            base = QDir::currentPath();
+        }
+        configDir = QDir(QDir(base).filePath(QStringLiteral("PyAppExec/%1").arg(sanitizedId)));
+    }
+
+    if (configDir.exists()) {
+        if (!configDir.removeRecursively()) {
+            if (errorMessage) {
+                *errorMessage = QObject::tr("Failed to remove config directory at %1").arg(configDir.absolutePath());
+            }
+            return false;
+        }
+    }
+
+    return true;
+}
+#endif

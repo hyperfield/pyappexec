@@ -24,6 +24,7 @@ private slots:
     void browseForIcon();
     void handleInstall();
     void handleCreateBundle();
+    void handleUninstall();
     void showAboutInstaller();
     void showAboutQtDialog();
 
@@ -31,6 +32,7 @@ private:
     void refreshInspection();
     SettingsModel gatherSettings() const;
     void logMessage(const QString& message);
+    void updateActionButtons();
 
     ProjectInspector inspector_;
     InspectionResult lastInspection_;
@@ -45,6 +47,7 @@ private:
     QPushButton* createBundleButton_{nullptr};
     QTextEdit* logView_{nullptr};
     QPushButton* installButton_{nullptr};
+    QPushButton* uninstallButton_{nullptr};
 };
 
 } // namespace installer

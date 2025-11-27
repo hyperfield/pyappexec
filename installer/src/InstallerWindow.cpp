@@ -104,6 +104,18 @@ InstallerWindow::InstallerWindow(QWidget* parent) : QMainWindow(parent)
     installButton_->setFixedWidth(220);
     layout->addWidget(installButton_, 0, Qt::AlignHCenter);
     connect(installButton_, &QPushButton::clicked, this, &InstallerWindow::handleInstall);
+    installButton_->setEnabled(false);
+
+    uninstallButton_ = new QPushButton(tr("Uninstall PyAppExec"), central);
+    uninstallButton_->setFixedWidth(220);
+    layout->addWidget(uninstallButton_, 0, Qt::AlignHCenter);
+    connect(uninstallButton_, &QPushButton::clicked, this, &InstallerWindow::handleUninstall);
+#if !defined(Q_OS_WIN)
+    uninstallButton_->setEnabled(false);
+    uninstallButton_->setToolTip(tr("Uninstall helper is available on Windows only."));
+#else
+    uninstallButton_->setEnabled(false);
+#endif
 
 #if defined(Q_OS_MAC)
     createBundleButton_ = new QPushButton(tr("Create macOS .app bundle"), central);
@@ -207,6 +219,8 @@ void InstallerWindow::refreshInspection()
             ini.endGroup();
         }
     }
+
+    updateActionButtons();
 }
 
 SettingsModel InstallerWindow::gatherSettings() const
@@ -285,6 +299,41 @@ void InstallerWindow::handleInstall()
 
     QDesktopServices::openUrl(QUrl::fromLocalFile(createdIni));
     QMessageBox::information(this, tr("Success"), tr("PyAppExec was installed for %1").arg(settings.appName));
+    updateActionButtons();
+}
+
+void InstallerWindow::handleUninstall()
+{
+#if defined(Q_OS_WIN)
+    SettingsModel settings = gatherSettings();
+    if (settings.projectPath.isEmpty()) {
+        QMessageBox::warning(this, tr("Missing information"), tr("Select a Python project directory to uninstall from."));
+        return;
+    }
+
+    const auto response = QMessageBox::question(
+        this,
+        tr("Uninstall PyAppExec"),
+        tr("This will remove the launcher, copied DLLs, and PyAppExec config/state for this app. Continue?"),
+        QMessageBox::Yes | QMessageBox::No,
+        QMessageBox::No);
+    if (response != QMessageBox::Yes) {
+        return;
+    }
+
+    BinaryPackager packager;
+    QString error;
+    if (!packager.uninstall(settings, &error)) {
+        QMessageBox::critical(this, tr("Uninstall failed"), error.isEmpty() ? tr("Unknown error.") : error);
+        return;
+    }
+
+    logMessage(tr("Uninstall completed for %1").arg(settings.projectPath));
+    QMessageBox::information(this, tr("Success"), tr("PyAppExec was uninstalled."));
+    updateActionButtons();
+#else
+    QMessageBox::information(this, tr("Not supported"), tr("Uninstall helper is currently Windows-only."));
+#endif
 }
 
 void InstallerWindow::handleCreateBundle()
@@ -370,6 +419,30 @@ void InstallerWindow::showAboutInstaller()
 void InstallerWindow::showAboutQtDialog()
 {
     QMessageBox::aboutQt(this);
+}
+
+void InstallerWindow::updateActionButtons()
+{
+    const bool hasProject = !projectPathEdit_->text().trimmed().isEmpty();
+    if (installButton_) {
+        installButton_->setEnabled(hasProject);
+    }
+
+#if defined(Q_OS_WIN)
+    bool hasIni = false;
+    if (hasProject) {
+        const QString iniPath = QDir(projectPathEdit_->text()).filePath(QStringLiteral("pyappexec.ini"));
+        hasIni = QFileInfo::exists(iniPath);
+    }
+    if (uninstallButton_) {
+        uninstallButton_->setEnabled(hasProject && hasIni);
+        if (!hasIni) {
+            uninstallButton_->setToolTip(tr("pyappexec.ini not found in the selected directory."));
+        } else {
+            uninstallButton_->setToolTip(QString());
+        }
+    }
+#endif
 }
 
 } // namespace installer
