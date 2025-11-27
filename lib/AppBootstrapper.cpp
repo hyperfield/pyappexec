@@ -19,6 +19,9 @@
 #include <cctype>
 #include <filesystem>
 #include <fstream>
+#ifdef _WIN32
+#  include <windows.h>
+#endif
 #include <iostream>
 #include <iterator>
 #include <tuple>
@@ -83,6 +86,37 @@ std::string trimCopy(const std::string& input) {
 
     return trimmed;
 }
+}
+
+std::string AppBootstrapper::expandEnvironmentVariables(const std::string& value)
+{
+#ifdef _WIN32
+    if (value.find('%') == std::string::npos) {
+        return value;
+    }
+
+    DWORD required = ExpandEnvironmentStringsA(value.c_str(), nullptr, 0);
+    if (required == 0) {
+        return value;
+    }
+
+    std::string buffer;
+    buffer.resize(static_cast<size_t>(required));
+    DWORD written = ExpandEnvironmentStringsA(
+        value.c_str(),
+        buffer.data(),
+        static_cast<DWORD>(buffer.size()));
+    if (written == 0 || written > buffer.size()) {
+        return value;
+    }
+
+    if (!buffer.empty() && buffer.back() == '\0') {
+        buffer.pop_back();
+    }
+    return buffer;
+#else
+    return value;
+#endif
 }
 
 std::string AppBootstrapper::sanitizeIdForPath(const std::string& appId)
@@ -292,14 +326,16 @@ void AppBootstrapper::parseRequirementsSection(const std::string& reqSection)
         req.url = req_url;
         req.file_name = req_file_name;
         req.cmd_params = specConfig.get_value(reqSection, key_cmd_params, false);
-        req.version_check_command = specConfig.get_value(reqSection, key_version_cmd, false);
+        req.version_check_command = expandEnvironmentVariables(
+            specConfig.get_value(reqSection, key_version_cmd, false));
     req.version_regex = specConfig.get_value(reqSection, key_version_regex, false);
     req.min_version = specConfig.get_value(reqSection, key_min_version, false);
     req.launch_file = specConfig.get_value(reqSection, key_launch_file, false);
     req.capture_stderr = parseBool(specConfig.get_value(reqSection, key_capture_stderr, false), false);
     req.append_to_path = parseBool(specConfig.get_value(reqSection, key_append_path, false), false);
     req.standalone = parseBool(specConfig.get_value(reqSection, key_standalone, false), false);
-    req.install_dir = specConfig.get_value(reqSection, key_install_dir, false);
+    req.install_dir = expandEnvironmentVariables(
+        specConfig.get_value(reqSection, key_install_dir, false));
     req.install_command = specConfig.get_value(reqSection, key_install_command, false);
 
         requirements.emplace_back(req);
@@ -771,7 +807,8 @@ fs::path AppBootstrapper::resolvePath(const std::string& value, const fs::path& 
         return {};
     }
 
-    fs::path candidate(value);
+    const std::string expanded = expandEnvironmentVariables(value);
+    fs::path candidate(expanded);
     if (!candidate.is_absolute()) {
         candidate = baseDir / candidate;
     }

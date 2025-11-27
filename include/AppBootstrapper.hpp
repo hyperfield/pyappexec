@@ -68,6 +68,7 @@ public:
     std::filesystem::path getDistribDir() const;
 
 private:
+    static std::string expandEnvironmentVariables(const std::string& value);
     static std::filesystem::path defaultConfigRoot(const std::string& appId);
     static std::string sanitizeIdForPath(const std::string& appId);
 

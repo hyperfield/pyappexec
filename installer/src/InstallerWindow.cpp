@@ -165,8 +165,9 @@ void InstallerWindow::refreshInspection()
         logMessage(note);
     }
 
-#if defined(Q_OS_MAC)
     const QString iniPath = QDir(projectPathEdit_->text()).filePath(QStringLiteral("pyappexec.ini"));
+
+#if defined(Q_OS_MAC)
     const bool hasIni = QFileInfo::exists(iniPath);
     if (createBundleButton_) {
         createBundleButton_->setEnabled(hasIni);
