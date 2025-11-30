@@ -154,6 +154,7 @@ cmake --build build --parallel
    cmake --build build --parallel
    ```
    > If CMake still complains that `Qt6 was not found`, confirm that `qtbase:x64-windows` was installed and that the same vcpkg root is passed via `CMAKE_TOOLCHAIN_FILE`. Setting `VCPKG_ROOT=C:\dev\vcpkg` globally also works.
+   > If you run the PowerShell helper (`scripts/build_windows.ps1`) from the Developer shell, first relax the session policy with `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass` so the script can execute.
 
 The build step generates `resources.c` from `resources/resources.xml` using `glib-compile-resources`. Ensure that tool is discoverable on your `PATH`.
 

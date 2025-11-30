@@ -43,6 +43,7 @@ private:
     QLineEdit* appIdEdit_{nullptr};
     QLineEdit* iconPathEdit_{nullptr};
     QCheckBox* hideGuiCheck_{nullptr};
+    QCheckBox* copyCliOnlyCheck_{nullptr};
     QCheckBox* bundleProjectCheck_{nullptr};
     QPushButton* createBundleButton_{nullptr};
     QTextEdit* logView_{nullptr};

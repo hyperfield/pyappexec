@@ -100,6 +100,11 @@ InstallerWindow::InstallerWindow(QWidget* parent) : QMainWindow(parent)
     hideGuiCheck_ = new QCheckBox(tr("Hide GUI after successful runs"), central);
     layout->addWidget(hideGuiCheck_);
 
+#if defined(Q_OS_WIN)
+    copyCliOnlyCheck_ = new QCheckBox(tr("Copy only the CLI version (reduces the size)"), central);
+    layout->addWidget(copyCliOnlyCheck_);
+#endif
+
     installButton_ = new QPushButton(tr("Install PyAppExec"), central);
     installButton_->setFixedWidth(220);
     layout->addWidget(installButton_, 0, Qt::AlignHCenter);
@@ -229,6 +234,11 @@ SettingsModel InstallerWindow::gatherSettings() const
         settings.iconPath = iconPathEdit_->text().trimmed();
     }
     settings.hideGuiAfterSuccess = hideGuiCheck_->isChecked();
+#if defined(Q_OS_WIN)
+    if (copyCliOnlyCheck_) {
+        settings.copyCliOnly = copyCliOnlyCheck_->isChecked();
+    }
+#endif
     return settings;
 }
 
@@ -291,6 +301,11 @@ void InstallerWindow::handleInstall()
 
     logMessage(tr("Generated %1").arg(createdIni));
     logMessage(tr("Copied launcher as %1").arg(settings.launcherArtifactName()));
+#if defined(Q_OS_WIN)
+    if (settings.copyCliOnly) {
+        logMessage(tr("CLI-only mode: skipped copying Qt and other adjacent DLLs."));
+    }
+#endif
 
     QDesktopServices::openUrl(QUrl::fromLocalFile(createdIni));
     QMessageBox::information(this, tr("Success"), tr("PyAppExec was installed for %1").arg(settings.appName));

@@ -13,6 +13,7 @@ struct SettingsModel
     QString iconPath;
     QString appId;
     bool hideGuiAfterSuccess{false};
+    bool copyCliOnly{false};
     bool bundleProject{false};
 
     QString executableFileName() const;

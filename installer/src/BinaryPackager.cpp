@@ -44,15 +44,29 @@ bool copyFileOverwrite(const QString& source,
     return true;
 }
 
-QString launcherSourcePath()
+QString launcherSourcePath(bool preferCli)
 {
     const QDir appDir(QCoreApplication::applicationDirPath());
 #ifdef Q_OS_WIN
+    if (preferCli) {
+        const QString cliCandidate = appDir.filePath(QStringLiteral("pyappexec_cli.exe"));
+        if (QFileInfo::exists(cliCandidate)) {
+            return cliCandidate;
+        }
+        return {};
+    }
     const QString exeCandidate = appDir.filePath(QStringLiteral("pyappexec.exe"));
     if (QFileInfo::exists(exeCandidate)) {
         return exeCandidate;
     }
 #endif
+    if (preferCli) {
+        const QString cliGeneric = appDir.filePath(QStringLiteral("pyappexec_cli"));
+        if (QFileInfo::exists(cliGeneric)) {
+            return cliGeneric;
+        }
+        return {};
+    }
     const QString generic = appDir.filePath(QStringLiteral("pyappexec"));
     if (QFileInfo::exists(generic)) {
         return generic;
@@ -574,10 +588,12 @@ bool BinaryPackager::install(const SettingsModel& settings,
     }
 #endif
 
-    const QString sourceLauncher = launcherSourcePath();
+    const QString sourceLauncher = launcherSourcePath(settings.copyCliOnly);
     if (sourceLauncher.isEmpty()) {
         if (errorMessage) {
-            *errorMessage = QObject::tr("Could not locate pyappexec binary near the installer.");
+            *errorMessage = settings.copyCliOnly
+                ? QObject::tr("Could not locate the CLI launcher (pyappexec_cli) near the installer.")
+                : QObject::tr("Could not locate pyappexec binary near the installer.");
         }
         return false;
     }
@@ -682,41 +698,43 @@ bool BinaryPackager::install(const SettingsModel& settings,
     }
 
 #ifdef Q_OS_WIN
-    // Bundle the Qt platform plugin and Qt/third-party DLLs that sit next to the launcher
-    const QString sourceDir = QFileInfo(sourceLauncher).absolutePath();
-    const QString platformDir = sourceDir + QStringLiteral("/platforms");
-    if (QDir(platformDir).exists()) {
-        const QString destPlatformDir = targetDir.filePath(QStringLiteral("platforms"));
-        if (!QDir().mkpath(destPlatformDir)) {
-            if (errorMessage) {
-                *errorMessage = QObject::tr("Failed to create platforms directory at %1").arg(destPlatformDir);
+    if (!settings.copyCliOnly) {
+        // Bundle the Qt platform plugin and Qt/third-party DLLs that sit next to the launcher
+        const QString sourceDir = QFileInfo(sourceLauncher).absolutePath();
+        const QString platformDir = sourceDir + QStringLiteral("/platforms");
+        if (QDir(platformDir).exists()) {
+            const QString destPlatformDir = targetDir.filePath(QStringLiteral("platforms"));
+            if (!QDir().mkpath(destPlatformDir)) {
+                if (errorMessage) {
+                    *errorMessage = QObject::tr("Failed to create platforms directory at %1").arg(destPlatformDir);
+                }
+                return false;
             }
-            return false;
+            QDirIterator it(platformDir, QDir::Files | QDir::NoSymLinks, QDirIterator::Subdirectories);
+            while (it.hasNext()) {
+                const QString sourcePath = it.next();
+                const QString relativePath = QDir(platformDir).relativeFilePath(sourcePath);
+                const QString destPath = destPlatformDir + QLatin1Char('/') + relativePath;
+                const QString parentDir = QFileInfo(destPath).absolutePath();
+                QDir().mkpath(parentDir);
+                if (!copyFileOverwrite(sourcePath, destPath,
+                                       QObject::tr("Failed to copy Qt platform plugin from %1 to %2"),
+                                       errorMessage)) {
+                    return false;
+                }
+            }
         }
-        QDirIterator it(platformDir, QDir::Files | QDir::NoSymLinks, QDirIterator::Subdirectories);
-        while (it.hasNext()) {
-            const QString sourcePath = it.next();
-            const QString relativePath = QDir(platformDir).relativeFilePath(sourcePath);
-            const QString destPath = destPlatformDir + QLatin1Char('/') + relativePath;
-            const QString parentDir = QFileInfo(destPath).absolutePath();
-            QDir().mkpath(parentDir);
-            if (!copyFileOverwrite(sourcePath, destPath,
-                                   QObject::tr("Failed to copy Qt platform plugin from %1 to %2"),
+
+        QDirIterator dllIt(sourceDir, QStringList{QStringLiteral("*.dll")}, QDir::Files | QDir::NoSymLinks);
+        while (dllIt.hasNext()) {
+            const QString dllPath = dllIt.next();
+            const QString fileName = QFileInfo(dllPath).fileName();
+            const QString destPath = targetDir.filePath(fileName);
+            if (!copyFileOverwrite(dllPath, destPath,
+                                   QObject::tr("Failed to copy runtime library from %1 to %2"),
                                    errorMessage)) {
                 return false;
             }
-        }
-    }
-
-    QDirIterator dllIt(sourceDir, QStringList{QStringLiteral("*.dll")}, QDir::Files | QDir::NoSymLinks);
-    while (dllIt.hasNext()) {
-        const QString dllPath = dllIt.next();
-        const QString fileName = QFileInfo(dllPath).fileName();
-        const QString destPath = targetDir.filePath(fileName);
-        if (!copyFileOverwrite(dllPath, destPath,
-                               QObject::tr("Failed to copy runtime library from %1 to %2"),
-                               errorMessage)) {
-            return false;
         }
     }
 #endif
@@ -779,7 +797,7 @@ bool installer::BinaryPackager::uninstall(const SettingsModel& settings, QString
     }
 
     // Remove DLLs that we would have copied alongside the launcher
-    const QString sourceLauncher = launcherSourcePath();
+    const QString sourceLauncher = launcherSourcePath(settings.copyCliOnly);
     if (!sourceLauncher.isEmpty()) {
         const QString sourceDir = QFileInfo(sourceLauncher).absolutePath();
         QSet<QString> dllNames;
