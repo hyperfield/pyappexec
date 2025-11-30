@@ -59,6 +59,7 @@ public:
     bool launchPythonApp();
     bool tryInstallPythonFromCommonPackageManagers();
     bool requiresProvisioning() const;
+    bool verifyRequirementInstalled(Requirement& req);
     static std::string getOSPrefix();
     static bool parseBool(const std::string& value, bool fallback);
     static std::filesystem::path defaultConfigRoot(const std::string& appId);

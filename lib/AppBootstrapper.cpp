@@ -65,6 +65,8 @@ const char kPathSeparator =
     ':';
 #endif
 
+bool ensureVersionBinaryAtRoot(Requirement& req, const fs::path& destDir);
+
 bool isProtectedInstallPath(const std::filesystem::path& path)
 {
 #ifdef _WIN32
@@ -96,6 +98,27 @@ bool isProcessElevated()
     return true;
 #endif
 }
+
+#ifdef _WIN32
+std::string findPowerShellExecutable()
+{
+    const char* systemRoot = std::getenv("SystemRoot");
+    if (!systemRoot || std::string(systemRoot).empty()) {
+        systemRoot = std::getenv("WINDIR");
+    }
+
+    if (systemRoot && *systemRoot) {
+        fs::path candidate = fs::path(systemRoot) / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe";
+        std::error_code ec;
+        if (fs::exists(candidate, ec) && !ec) {
+            return candidate.string();
+        }
+    }
+
+    // Fall back to PATH resolution handled by CreateProcess
+    return "powershell.exe";
+}
+#endif
 
 std::string trimCopy(const std::string& input) {
     std::string trimmed = input;
@@ -395,6 +418,10 @@ void AppBootstrapper::parseRequirementsSection(const std::string& reqSection)
             break;
         }
 
+        auto stripNulls = [](std::string& value) {
+            value.erase(std::remove(value.begin(), value.end(), '\0'), value.end());
+        };
+
         Requirement req;
         req.name = req_name;
         req.url = req_url;
@@ -402,15 +429,18 @@ void AppBootstrapper::parseRequirementsSection(const std::string& reqSection)
         req.cmd_params = specConfig.get_value(reqSection, key_cmd_params, false);
         req.version_check_command = expandEnvironmentVariables(
             specConfig.get_value(reqSection, key_version_cmd, false));
-    req.version_regex = specConfig.get_value(reqSection, key_version_regex, false);
-    req.min_version = specConfig.get_value(reqSection, key_min_version, false);
-    req.launch_file = specConfig.get_value(reqSection, key_launch_file, false);
-    req.capture_stderr = parseBool(specConfig.get_value(reqSection, key_capture_stderr, false), false);
-    req.append_to_path = parseBool(specConfig.get_value(reqSection, key_append_path, false), false);
-    req.standalone = parseBool(specConfig.get_value(reqSection, key_standalone, false), false);
-    req.install_dir = expandEnvironmentVariables(
-        specConfig.get_value(reqSection, key_install_dir, false));
-    req.install_command = specConfig.get_value(reqSection, key_install_command, false);
+        stripNulls(req.version_check_command);
+        req.version_regex = specConfig.get_value(reqSection, key_version_regex, false);
+        req.min_version = specConfig.get_value(reqSection, key_min_version, false);
+        req.launch_file = specConfig.get_value(reqSection, key_launch_file, false);
+        req.capture_stderr = parseBool(specConfig.get_value(reqSection, key_capture_stderr, false), false);
+        req.append_to_path = parseBool(specConfig.get_value(reqSection, key_append_path, false), false);
+        req.standalone = parseBool(specConfig.get_value(reqSection, key_standalone, false), false);
+        std::string installDirValue = expandEnvironmentVariables(
+            specConfig.get_value(reqSection, key_install_dir, false));
+        stripNulls(installDirValue);
+        req.install_dir = installDirValue;
+        req.install_command = specConfig.get_value(reqSection, key_install_command, false);
 
         requirements.emplace_back(req);
         index++;
@@ -643,6 +673,10 @@ bool AppBootstrapper::installRequirements()
                 success = false;
                 break;
             }
+            if (!verifyRequirementInstalled(req)) {
+                success = false;
+                break;
+            }
             continue;
         }
 
@@ -706,50 +740,101 @@ bool AppBootstrapper::installRequirements()
                 if (req.append_to_path) {
                     addRequirementPath(destDir);
                 }
+#ifdef _WIN32
+                ensureVersionBinaryAtRoot(req, destDir);
+#endif
+                if (!verifyRequirementInstalled(req)) {
+                    return false;
+                }
                 return true;
             };
 
             const std::string ext = installerPath.extension().string();
 #ifdef _WIN32
             if (ext == ".zip") {
+                auto sanitizeForPowershell = [](const std::string& value) {
+                    std::string cleaned;
+                    cleaned.reserve(value.size());
+                    for (char ch : value) {
+                        if (ch != '\0') {
+                            cleaned.push_back(ch);
+                        }
+                    }
+                    size_t pos = 0;
+                    while ((pos = cleaned.find('\'', pos)) != std::string::npos) {
+                        cleaned.insert(pos, "'");
+                        pos += 2;
+                    }
+                    return cleaned;
+                };
+
+                const std::string installerStr = sanitizeForPowershell(installerPath.string());
+                const std::string destStr = sanitizeForPowershell(destDir.string());
+
                 std::ostringstream cmd;
-                cmd << "powershell -ExecutionPolicy Bypass -Command \""
-                    << "$ErrorActionPreference='Stop';"
+                cmd << "$ErrorActionPreference='Stop';"
                     << "$ProgressPreference='SilentlyContinue';"
-                    << "$dl='" << installerPath.string() << "';"
-                    << "$dest='" << destDir.string() << "';"
+                    << "$dl='" << installerStr << "';"
+                    << "$dest='" << destStr << "';"
                     << "if(Test-Path $dest){Remove-Item $dest -Recurse -Force};"
                     << "Expand-Archive -LiteralPath $dl -DestinationPath $dest -Force;"
                     << "$ff=Get-ChildItem -Path $dest -Filter 'ffmpeg.exe' -Recurse -File | Select-Object -First 1;"
                     << "if($ff){Copy-Item $ff.FullName -Destination (Join-Path $dest 'ffmpeg.exe') -Force};"
                     << "$fp=Get-ChildItem -Path $dest -Filter 'ffprobe.exe' -Recurse -File | Select-Object -First 1;"
-                    << "if($fp){Copy-Item $fp.FullName -Destination (Join-Path $dest 'ffprobe.exe') -Force};"
-                    << "\"";
+                    << "if($fp){Copy-Item $fp.FullName -Destination (Join-Path $dest 'ffprobe.exe') -Force};";
 #ifdef _WIN32
                 std::vector<std::string> psArgs{
                     "-ExecutionPolicy", "Bypass",
                     "-Command", cmd.str()
                 };
+                std::string psExe = findPowerShellExecutable();
                 try {
+                    bp::ipstream psOut;
+                    bp::ipstream psErr;
                     bp::child ps(
-                        bp::exe = "powershell",
+                        bp::exe = psExe,
                         bp::args = psArgs,
-                        bp::start_dir = destDir.string()
+                        bp::start_dir = distribDir.string(),
+                        bp::std_out > psOut,
+                        bp::std_err > psErr
                         BP_WIN_HIDE_ARGS);
                     ps.wait();
                     handled = ps.exit_code() == 0;
+                    if (!handled) {
+                        std::ostringstream combined;
+                        std::string line;
+                        while (std::getline(psOut, line)) {
+                            combined << line << '\n';
+                        }
+                        while (std::getline(psErr, line)) {
+                            combined << line << '\n';
+                        }
+                        spdlog::error("PowerShell extraction exited with code {} for {}", ps.exit_code(), req.name);
+                        spdlog::error("PowerShell command: {}", cmd.str());
+                        if (!combined.str().empty()) {
+                            spdlog::error("PowerShell output: {}", combined.str());
+                        }
+                    } else {
+                        spdlog::debug("PowerShell extraction completed for {}", req.name);
+                    }
                 } catch (const std::exception& err) {
                     spdlog::error("Failed to extract {}: {}", req.name, err.what());
+                    spdlog::debug("PowerShell command: {}", cmd.str());
                     handled = false;
                 }
 #else
                 handled = runCommand(cmd.str());
 #endif
-                if (!handled) {
-                    success = false;
-                    break;
+                if (handled) {
+                    ensureVersionBinaryAtRoot(req, destDir);
+                    if (!verifyRequirementInstalled(req)) {
+                        success = false;
+                        break;
+                    }
+                    continue;
                 }
-                continue;
+                success = false;
+                break;
             }
 #else
             auto toolAvailable = [](const std::string& tool) {
@@ -1252,6 +1337,141 @@ void logRequirementStatus(const Requirement& req, const std::string& version, bo
     }
 }
 
+std::pair<std::string, std::string> splitProgramAndArgs(const std::string& cmd)
+{
+    std::string trimmed = trimCopy(cmd);
+    if (trimmed.empty()) {
+        return {"", ""};
+    }
+
+    std::string program;
+    std::string rest;
+    if (!trimmed.empty() && trimmed.front() == '"') {
+        auto endQuote = trimmed.find('"', 1);
+        if (endQuote != std::string::npos && endQuote > 1) {
+            program = trimmed.substr(1, endQuote - 1);
+            rest = trimCopy(trimmed.substr(endQuote + 1));
+        }
+    }
+
+    if (program.empty()) {
+        std::istringstream ss(trimmed);
+        ss >> program;
+        std::string remainder;
+        std::getline(ss, remainder);
+        rest = trimCopy(remainder);
+    }
+
+    return {program, rest};
+}
+
+bool maybeUpdateVersionCheckFromInstallDir(Requirement& req)
+{
+#ifdef _WIN32
+    (void)req;
+#endif
+    if (req.install_dir.empty()) {
+        return false;
+    }
+
+    auto [program, rest] = splitProgramAndArgs(req.version_check_command);
+    if (program.empty()) {
+        return false;
+    }
+
+    std::error_code ec;
+    if (fs::exists(program, ec) && !ec) {
+        return false;
+    }
+
+    std::string targetFile = fs::path(program).filename().string();
+    if (targetFile.empty()) {
+        return false;
+    }
+
+    fs::path found;
+    for (fs::recursive_directory_iterator it(req.install_dir, ec), end; it != end && !ec; ++it) {
+        if (!it->is_regular_file(ec)) {
+            continue;
+        }
+        if (it->path().filename().string() == targetFile) {
+            found = it->path();
+            break;
+        }
+    }
+
+    if (found.empty()) {
+        return false;
+    }
+
+    std::string newCmd = "\"" + found.string() + "\"";
+    if (!rest.empty()) {
+        newCmd += " " + rest;
+    }
+    spdlog::info("Updated version_check_command for {} to {}", req.name, newCmd);
+    req.version_check_command = newCmd;
+    return true;
+}
+
+bool ensureVersionBinaryAtRoot(Requirement& req, const fs::path& destDir)
+{
+    auto [program, rest] = splitProgramAndArgs(req.version_check_command);
+    if (program.empty()) {
+        return true;
+    }
+
+    std::string targetName = fs::path(program).filename().string();
+    if (targetName.empty()) {
+        return true;
+    }
+
+    fs::path targetPath = destDir / targetName;
+    std::error_code ec;
+    if (fs::exists(targetPath, ec) && !ec) {
+        std::string newCmd = "\"" + targetPath.string() + "\"";
+        if (!rest.empty()) {
+            newCmd += " " + rest;
+        }
+        req.version_check_command = newCmd;
+        return true;
+    }
+
+    fs::path found;
+    for (fs::recursive_directory_iterator it(destDir, ec), end; it != end && !ec; ++it) {
+        if (!it->is_regular_file(ec)) {
+            continue;
+        }
+        if (it->path().filename().string() == targetName) {
+            found = it->path();
+            break;
+        }
+    }
+    if (!ec && found.empty()) {
+        return false;
+    }
+    if (ec) {
+        spdlog::warn("Failed to search {} for {}: {}", destDir.string(), targetName, ec.message());
+        return false;
+    }
+
+    std::error_code copyEc;
+    fs::create_directories(destDir, copyEc);
+    copyEc.clear();
+    fs::copy_file(found, targetPath, fs::copy_options::overwrite_existing, copyEc);
+    if (copyEc) {
+        spdlog::warn("Could not place {} at {}: {}", targetName, targetPath.string(), copyEc.message());
+        return false;
+    }
+
+    std::string newCmd = "\"" + targetPath.string() + "\"";
+    if (!rest.empty()) {
+        newCmd += " " + rest;
+    }
+    req.version_check_command = newCmd;
+    spdlog::info("Pinned {} to {}", req.name, targetPath.string());
+    return true;
+}
+
 } // namespace
 
 bool AppBootstrapper::isRequirementAlreadyInstalled(Requirement& req)
@@ -1274,6 +1494,32 @@ bool AppBootstrapper::isRequirementAlreadyInstalled(Requirement& req)
         maybeAddRequirementPathFromVersionCheck(req);
     }
     return meets;
+}
+
+bool AppBootstrapper::verifyRequirementInstalled(Requirement& req)
+{
+    if (req.version_check_command.empty()) {
+        return true;
+    }
+
+    auto versionOpt = extractRequirementVersion(req);
+    if (!versionOpt && maybeUpdateVersionCheckFromInstallDir(req)) {
+        versionOpt = extractRequirementVersion(req);
+    }
+    if (!versionOpt) {
+        spdlog::error("Requirement {} does not appear installed after extraction (command: {}).",
+                      req.name, req.version_check_command);
+        return false;
+    }
+    const std::string& version = *versionOpt;
+    bool meets = req.min_version.empty() || Utils::isVersionAtLeast(version, req.min_version);
+    logRequirementStatus(req, version, meets);
+    req.last_version_check_result = meets;
+    req.status_reported = true;
+    if (meets && req.append_to_path) {
+        maybeAddRequirementPathFromVersionCheck(req);
+    }
+    return meets || req.min_version.empty();
 }
 
 

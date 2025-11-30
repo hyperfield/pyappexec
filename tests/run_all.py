@@ -20,6 +20,7 @@ TEST_SCRIPTS = [
     "tests/test_gui_preference_state.py",
     "tests/test_launcher_help.py",
     "tests/test_provisioning_flow.py",
+    "tests/test_ffmpeg_extraction_copy.py",
 ]
 
 
