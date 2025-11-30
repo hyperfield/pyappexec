@@ -31,77 +31,15 @@ std::filesystem::path ConfigLoader::resolveConfigPath(const std::optional<std::s
         return explicitPath;
     }
 
-    auto searchDir = [](const fs::path& dir) -> std::optional<fs::path> {
-        if (dir.empty()) {
-            return std::nullopt;
-        }
-        std::error_code ec;
-        if (!fs::exists(dir, ec) || !fs::is_directory(dir, ec)) {
-            return std::nullopt;
-        }
-        fs::path primary = dir / "pyappexec.ini";
-        if (fs::exists(primary, ec)) {
-            return primary;
-        }
-        fs::directory_iterator it(dir, ec);
-        fs::directory_iterator end;
-        for (; it != end && !ec; ++it) {
-            if (!it->is_directory()) {
-                continue;
-            }
-            fs::path candidate = it->path() / "pyappexec.ini";
-            if (fs::exists(candidate, ec)) {
-                return candidate;
-            }
-        }
-        return std::nullopt;
-    };
-
-    auto searchWithParents = [&](fs::path dir) -> std::optional<fs::path> {
-        if (dir.empty()) {
-            return std::nullopt;
-        }
-        std::error_code ec;
-        if (!fs::exists(dir, ec)) {
-            return std::nullopt;
-        }
-        constexpr int kMaxParentDepth = 4;
-        for (int depth = 0; depth <= kMaxParentDepth && !dir.empty(); ++depth) {
-            if (auto found = searchDir(dir)) {
-                return found;
-            }
-            auto parent = dir.parent_path();
-            if (parent.empty() || parent == dir) {
-                break;
-            }
-            dir = parent;
-        }
-        return std::nullopt;
-    };
-
-    if (auto fromCwd = searchWithParents(fs::current_path())) {
-        return *fromCwd;
-    }
-
-    if (!binaryDir_.empty()) {
-        fs::path binaryPath = binaryDir_;
-        if (!binaryPath.is_absolute()) {
-            binaryPath = fs::absolute(binaryPath);
-        }
-        std::error_code eqEc;
-        bool isSameAsCwd = fs::equivalent(binaryPath, fs::current_path(), eqEc);
-        if (eqEc) {
-            isSameAsCwd = false;
-        }
-        if (!isSameAsCwd) {
-            if (auto fromBinary = searchWithParents(binaryPath)) {
-                return *fromBinary;
-            }
-        }
+    fs::path primary = fs::current_path() / "pyappexec.ini";
+    std::error_code ec;
+    if (fs::exists(primary, ec)) {
+        spdlog::info("Found pyappexec.ini at {}", primary.string());
+        return primary;
     }
 
     throw std::runtime_error(
-        "Unable to locate pyappexec.ini in the current directory or its immediate subdirectories.\n"
+        "Unable to locate pyappexec.ini in the current directory.\n"
         "Pass --config /path/to/pyappexec.ini to specify the configuration explicitly.");
 }
 

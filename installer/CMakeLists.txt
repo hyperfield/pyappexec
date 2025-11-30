@@ -21,7 +21,11 @@ endif()
 add_executable(pyappexec_installer ${INSTALLER_SOURCES})
 set_common_runtime_output(pyappexec_installer)
 
-# Hide the console window on Windows builds.
+# Hide the console window on Windows builds for the GUI binary.
+if(WIN32)
+    set_target_properties(pyappexec_installer PROPERTIES WIN32_EXECUTABLE TRUE)
+endif()
+
 target_include_directories(pyappexec_installer
     PRIVATE
         ${CMAKE_SOURCE_DIR}/include

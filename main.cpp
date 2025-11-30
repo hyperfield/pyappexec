@@ -67,12 +67,30 @@ void printVersion(bool allowDialog)
 #endif
 }
 
+void showFatalErrorGui(const std::string& message)
+{
+#if _WIN32
+    MessageBoxA(nullptr, message.c_str(), "PyAppExec error", MB_OK | MB_ICONERROR);
+#else
+    (void)message;
+#endif
+}
+
 } // namespace
 
 int main(int argc, char** argv)
 {
     CliParser parser(argc, argv);
     CliOptions options = parser.parse();
+    try {
+        std::filesystem::path exeName = std::filesystem::path(argv[0]).stem();
+        std::string stem = exeName.string();
+        if (stem.find("pyappexec_cli") != std::string::npos) {
+            options.forceCli = true;
+        }
+    } catch (...) {
+        // ignore
+    }
     if (options.showVersion) {
         printVersion(!options.forceCli);
         return 0;
@@ -87,6 +105,14 @@ int main(int argc, char** argv)
     Logger::initialize();
 
     try {
+        // Pin working directory to the executable location to avoid picking up configs elsewhere.
+        try {
+            std::filesystem::current_path(binaryDir);
+            spdlog::info("Working directory set to {}", binaryDir.string());
+        } catch (const std::exception& e) {
+            spdlog::warn("Failed to set working directory to {}: {}", binaryDir.string(), e.what());
+        }
+
         ConfigLoader loader(options, binaryDir);
         SpecConfig specConfig = loader.load();
         LoggerConfigurator(specConfig).apply();
@@ -95,7 +121,13 @@ int main(int argc, char** argv)
         return launcher.run(options, specConfig, loader, argc, argv);
 
     } catch (const std::runtime_error& e) {
-        spdlog::error("Error: {}", e.what());
+        std::string msg = std::string("Error: ") + e.what();
+        spdlog::error("{}", msg);
+#if _WIN32
+        if (!options.forceCli) {
+            showFatalErrorGui(msg);
+        }
+#endif
         return 1;
     }
 }

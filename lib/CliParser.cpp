@@ -58,7 +58,6 @@ void CliParser::printHelp() const
               << "Usage: " << argv_[0] << " [options]\n\n"
               << "Options:\n"
               << "  --config <path>     Use a specific pyappexec.ini\n"
-              << "  --no-gui            Force CLI mode even if GUI is enabled in the INI\n"
               << "  --reset-gui         Clear the saved \"hide GUI\" preference for this app\n"
               << "  --version, -v       Show version and exit\n"
               << "  --help              Show this message and exit\n\n"

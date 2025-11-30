@@ -187,10 +187,8 @@ if(BUILD_LAUNCHER)
     endif()
 
     set(SOURCES
-        main.cpp
         lib/CliParser.cpp
         lib/ConfigLoader.cpp
-        lib/Launcher.cpp
         lib/LoggerConfigurator.cpp
         lib/INIReader.cpp
         lib/AppBootstrapper.cpp
@@ -198,10 +196,6 @@ if(BUILD_LAUNCHER)
         lib/SpecConfig.cpp
         lib/Utils.cpp
         lib/Logger.cpp
-        gui/MainWindow.cpp
-        gui/GuiRunner.cpp
-        include/gui/MainWindow.hpp
-        resources/qt_resources.qrc
         ${_PYAPPEXEC_RESOURCE_SOURCE}
     )
 
@@ -210,10 +204,38 @@ if(BUILD_LAUNCHER)
         list(APPEND SOURCES ${CMAKE_BINARY_DIR}/appicon.rc)
     endif()
 
-    add_executable(pyappexec ${SOURCES})
+    set(PYAPPEXEC_GUI_SOURCES
+        main.cpp
+        lib/Launcher.cpp
+        gui/MainWindow.cpp
+        gui/GuiRunner.cpp
+        include/gui/MainWindow.hpp
+        resources/qt_resources.qrc
+        ${SOURCES}
+    )
+
+    set(PYAPPEXEC_CLI_SOURCES
+        main_cli.cpp
+        lib/LauncherCli.cpp
+        ${SOURCES}
+    )
+
+    add_executable(pyappexec ${PYAPPEXEC_GUI_SOURCES})
     set_common_runtime_output(pyappexec)
 
+    add_executable(pyappexec_cli ${PYAPPEXEC_CLI_SOURCES})
+    set_common_runtime_output(pyappexec_cli)
+
+    if(WIN32)
+        set_target_properties(pyappexec PROPERTIES WIN32_EXECUTABLE TRUE)
+    endif()
+
     target_include_directories(pyappexec
+        PRIVATE
+            include
+    )
+
+    target_include_directories(pyappexec_cli
         PRIVATE
             include
     )
@@ -222,6 +244,14 @@ if(BUILD_LAUNCHER)
         PRIVATE
             PkgConfig::GIO
             Qt6::Widgets
+            Boost::boost
+            Boost::filesystem
+            spdlog::spdlog
+    )
+
+    target_link_libraries(pyappexec_cli
+        PRIVATE
+            PkgConfig::GIO
             Boost::boost
             Boost::filesystem
             spdlog::spdlog

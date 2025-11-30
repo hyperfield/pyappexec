@@ -173,10 +173,15 @@ On macOS, if you distribute PyAppExec inside an `.app` bundle, launch flags (for
 
 **Useful flags**
 
-- `--config /path/to/pyappexec.ini` – override the config discovery logic described above.
-- `--no-gui` – force CLI mode even when the INI requests the Qt front-end.
-- `--reset-gui` – clear the persisted "hide GUI" preference (handy if you previously suppressed the GUI after a successful run).
-- `--help` – print a brief overview of PyAppExec and the available flags.
+- `--config /path/to/pyappexec.ini` - override the config discovery logic described above.
+- `--reset-gui` - clear the persisted "hide GUI" preference (handy if you previously suppressed the GUI after a successful run).
+- `--help` - print a brief overview of PyAppExec and the available flags.
+- `--version` - print version/author/years/repo.
+
+**CLI vs GUI binaries**
+
+- GUI binaries: `pyappexec` and `pyappexec_installer` (Win32 subsystem on Windows). Use these for normal double-click/Start Menu usage; CLI flags are only visible when launched from a console.
+- CLI binary: `pyappexec_cli` (console subsystem). Use this for terminal/automation; it supports `--help`, `--version`, and the launcher flags above. GUI output is suppressed for `--help`/`--version` on the CLI build.
 
 ### PyAppExec Installer
 
