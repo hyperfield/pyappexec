@@ -97,7 +97,7 @@ InstallerWindow::InstallerWindow(QWidget* parent) : QMainWindow(parent)
     connect(iconRow.browseButton, &QPushButton::clicked, this, &InstallerWindow::browseForIcon);
 #endif
 
-    hideGuiCheck_ = new QCheckBox(tr("Hide GUI after successful runs"), central);
+    hideGuiCheck_ = new QCheckBox(tr("Hide GUI/CLI after successful runs"), central);
     layout->addWidget(hideGuiCheck_);
 
 #if defined(Q_OS_WIN)
@@ -207,7 +207,10 @@ void InstallerWindow::refreshInspection()
             if (!iniAppId.isEmpty()) {
                 appIdEdit_->setText(iniAppId);
             }
-            const QString guiHide = ini.value(QStringLiteral("GUI_HIDE_AFTER_SUCCESS")).toString();
+            QString guiHide = ini.value(QStringLiteral("GUI_CLI_HIDE_AFTER_SUCCESS")).toString();
+            if (guiHide.isEmpty()) {
+                guiHide = ini.value(QStringLiteral("GUI_HIDE_AFTER_SUCCESS")).toString(); // backward compatibility
+            }
             if (!guiHide.isEmpty()) {
                 const QString lowered = guiHide.trimmed().toLower();
                 const bool hide = (lowered == QStringLiteral("1") ||

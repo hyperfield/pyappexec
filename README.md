@@ -235,7 +235,7 @@ PyAppExec is driven entirely by `pyappexec.ini`. Each operating system gets its 
 | `requirements_file` | no | Relative path to the Python requirements file. If omitted, Python dependency installation is skipped. |
 | `virtual_env_dir` | no | Directory to create the virtual environment in. If empty, defaults to `<config_root>/venv`. If relative, it is resolved against `python_app_dir`. |
 | `GUI` | no | `true` to launch the Qt front-end; `false` to stay purely CLI. Users can also pass `--no-gui` at runtime to force CLI regardless of config. |
-| `GUI_HIDE_AFTER_SUCCESS` | no | `true` to automatically set the “hide GUI after successful runs” preference once a run succeeds. |
+| `GUI_CLI_HIDE_AFTER_SUCCESS` | no | `true` to automatically set the “hide GUI/CLI after successful runs” preference once a run succeeds; on Windows CLI builds it also closes the launcher console after the target app starts. |
 | `log_console` | no | `true` (default) to emit logs to stdout/stderr, `false` to silence console output (the GUI still captures logs internally). |
 | `log_level` | no | Minimum severity for console logs. Supports `trace`, `debug`, `info`, `warn`, `error`, `critical`, `off`. |
 

@@ -56,7 +56,7 @@ public:
     PythonSetupStatus::Status getPythonSetupStatus();
     bool installRequirements();
     bool downloadRequirements();
-    bool launchPythonApp();
+    bool launchPythonApp(bool detachAfterLaunch = false);
     bool tryInstallPythonFromCommonPackageManagers();
     bool requiresProvisioning() const;
     bool verifyRequirementInstalled(Requirement& req);

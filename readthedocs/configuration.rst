@@ -14,3 +14,8 @@ CLI vs GUI binaries
 
 - GUI binaries: ``pyappexec`` and ``pyappexec_installer``. Launch these normally (double-click/Start Menu); flags like ``--help``/``--version`` are only visible when you run them from a terminal.
 - CLI binary: ``pyappexec_cli`` (console subsystem). Use this in terminals/automation; it supports ``--help``, ``--version``, and the launcher flags documented above. GUI output is suppressed for ``--help``/``--version`` on the CLI build.
+
+Hide GUI/CLI after success
+--------------------------
+
+- Set ``GUI_CLI_HIDE_AFTER_SUCCESS = true`` under the ``[<OS>:main]`` section to suppress the GUI after a successful run and remember that preference. On Windows CLI builds, the same flag also causes the launcher console window to close after the target app starts (the app keeps running).

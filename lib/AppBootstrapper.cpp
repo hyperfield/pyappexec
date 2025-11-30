@@ -664,7 +664,7 @@ bool AppBootstrapper::installPythonDependencies()
 }
 
 
-bool AppBootstrapper::launchPythonApp()
+bool AppBootstrapper::launchPythonApp(bool detachAfterLaunch)
 {
     fs::path pythonExecutable = getVirtualEnvPythonExecutable();
     if (!fs::exists(pythonExecutable)) {
@@ -702,6 +702,90 @@ bool AppBootstrapper::launchPythonApp()
                 pathEnv.append(p.string());
             }
             env["PATH"] = pathEnv;
+        }
+        if (env.find("PYTHONUNBUFFERED") == env.end()) {
+            env["PYTHONUNBUFFERED"] = "1";
+        }
+
+        if (detachAfterLaunch) {
+#ifdef _WIN32
+            auto quoteArg = [](const std::string& s) {
+                if (s.find_first_of(" \t\"") == std::string::npos) {
+                    return s;
+                }
+                std::string q;
+                q.reserve(s.size() + 2);
+                q.push_back('"');
+                for (char c : s) {
+                    if (c == '"') {
+                        q.push_back('\\');
+                    }
+                    q.push_back(c);
+                }
+                q.push_back('"');
+                return q;
+            };
+
+            std::filesystem::path execForDetach = pythonExecutable;
+            {
+                std::filesystem::path pythonw = pythonExecutable.parent_path() / "pythonw.exe";
+                std::error_code ec;
+                if (std::filesystem::exists(pythonw, ec) && !ec) {
+                    execForDetach = pythonw;
+                    spdlog::info("Using pythonw.exe for detached launch.");
+                }
+            }
+
+            std::string cmdLine = quoteArg(execForDetach.string());
+            for (const auto& a : args) {
+                cmdLine.push_back(' ');
+                cmdLine += quoteArg(a);
+            }
+
+            std::vector<char> envBlock;
+            for (const auto& kv : env) {
+                const std::string entry = kv.get_name() + '=' + kv.to_string();
+                envBlock.insert(envBlock.end(), entry.begin(), entry.end());
+                envBlock.push_back('\0');
+            }
+            envBlock.push_back('\0');
+
+            STARTUPINFOA si;
+            PROCESS_INFORMATION pi;
+            ZeroMemory(&si, sizeof(si));
+            ZeroMemory(&pi, sizeof(pi));
+            si.cb = sizeof(si);
+
+            DWORD creationFlags = CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS;
+            // If we fell back to console python.exe, also suppress window creation.
+            if (execForDetach.filename().string().find("pythonw.exe") == std::string::npos) {
+                creationFlags |= CREATE_NO_WINDOW;
+            }
+            std::string workDir = python_app_dir.string();
+
+            if (CreateProcessA(
+                    nullptr,
+                    cmdLine.data(),
+                    nullptr,
+                    nullptr,
+                    FALSE,
+                    creationFlags,
+                    envBlock.empty() ? nullptr : envBlock.data(),
+                    workDir.empty() ? nullptr : workDir.c_str(),
+                    &si,
+                    &pi)) {
+                CloseHandle(pi.hThread);
+                CloseHandle(pi.hProcess);
+                spdlog::info("Launched Python application in background (CLI hide preference enabled); exiting launcher.");
+                return true;
+            } else {
+                const DWORD errCode = GetLastError();
+                spdlog::error("Failed to start Python application in background (Win32 error {}).", static_cast<unsigned int>(errCode));
+                return false;
+            }
+#else
+            spdlog::warn("Detach-after-launch requested, but background launch is only supported on Windows CLI mode.");
+#endif
         }
 
         int exitCode = runProcessWithLogging(
@@ -1569,6 +1653,9 @@ bool AppBootstrapper::isRequirementAlreadyInstalled(Requirement& req)
     }
 
     auto versionOpt = extractRequirementVersion(req);
+    if (!versionOpt && maybeUpdateVersionCheckFromInstallDir(req)) {
+        versionOpt = extractRequirementVersion(req);
+    }
     if (!versionOpt) {
         return false;
     }

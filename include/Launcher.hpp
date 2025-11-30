@@ -17,7 +17,7 @@ public:
 
 private:
     bool ensurePythonReady(AppBootstrapper& appBootstrapper) const;
-    int runCli(AppBootstrapper& appBootstrapper) const;
+    int runCli(AppBootstrapper& appBootstrapper, bool detachAfterLaunch) const;
 };
 
 #endif

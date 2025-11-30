@@ -68,6 +68,12 @@ int LauncherCli::run(SpecConfig& specConfig, const ConfigLoader& loader) const
     ensureMacDefaultPathsInEnv();
 #endif
     AppBootstrapper appBootstrapper(specConfig);
+    const std::string mainSection = AppBootstrapper::getOSPrefix() + ":main";
+    std::string hidePref = specConfig.get_value(mainSection, "GUI_CLI_HIDE_AFTER_SUCCESS", false);
+    if (hidePref.empty()) {
+        hidePref = specConfig.get_value(mainSection, "GUI_HIDE_AFTER_SUCCESS", false); // backward compatibility
+    }
+    const bool detachAfterLaunch = AppBootstrapper::parseBool(hidePref, false);
 
     if (!ensurePythonReady(appBootstrapper)) {
         return 1;
@@ -86,6 +92,5 @@ int LauncherCli::run(SpecConfig& specConfig, const ConfigLoader& loader) const
         }
     }
 
-    return appBootstrapper.launchPythonApp() ? 0 : 1;
+    return appBootstrapper.launchPythonApp(detachAfterLaunch) ? 0 : 1;
 }
-

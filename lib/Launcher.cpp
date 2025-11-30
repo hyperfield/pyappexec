@@ -118,7 +118,7 @@ bool Launcher::ensurePythonReady(AppBootstrapper& appBootstrapper) const
     return true;
 }
 
-int Launcher::runCli(AppBootstrapper& appBootstrapper) const
+int Launcher::runCli(AppBootstrapper& appBootstrapper, bool detachAfterLaunch) const
 {
     if (!ensurePythonReady(appBootstrapper)) {
         return 1;
@@ -129,7 +129,7 @@ int Launcher::runCli(AppBootstrapper& appBootstrapper) const
         [&] { return appBootstrapper.installRequirements(); },
         [&] { return appBootstrapper.setupVirtualEnv(); },
         [&] { return appBootstrapper.installPythonDependencies(); },
-        [&] { return appBootstrapper.launchPythonApp(); }
+        [&] { return appBootstrapper.launchPythonApp(detachAfterLaunch); }
     };
 
     for (const auto& step : steps) {
@@ -159,8 +159,11 @@ int Launcher::run(const CliOptions& options,
     }
 
     std::string mainSection = AppBootstrapper::getOSPrefix() + ":main";
-    bool autoSuppressAfterSuccess = AppBootstrapper::parseBool(
-        specConfig.get_value(mainSection, "GUI_HIDE_AFTER_SUCCESS", false), false);
+    std::string hidePref = specConfig.get_value(mainSection, "GUI_CLI_HIDE_AFTER_SUCCESS", false);
+    if (hidePref.empty()) {
+        hidePref = specConfig.get_value(mainSection, "GUI_HIDE_AFTER_SUCCESS", false); // backward compatibility
+    }
+    bool autoSuppressAfterSuccess = AppBootstrapper::parseBool(hidePref, false);
 
     bool launchGui = shouldLaunchGui(specConfig, options.forceCli);
     if (launchGui && loadGuiPreference(guiPreferenceFile) && !appBootstrapper.requiresProvisioning()) {
@@ -170,7 +173,8 @@ int Launcher::run(const CliOptions& options,
         return runGuiApplication(argc, argv, options.forwardedArgs, guiPreferenceFile.string(), appDisplayName, autoSuppressAfterSuccess);
     }
 
-    int result = runCli(appBootstrapper);
+    const bool detachAfterLaunch = options.forceCli && autoSuppressAfterSuccess;
+    int result = runCli(appBootstrapper, detachAfterLaunch);
     if (result != 0) {
         writeGuiPreference(guiPreferenceFile, false);
     } else {

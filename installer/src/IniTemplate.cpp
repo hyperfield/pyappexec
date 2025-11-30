@@ -53,7 +53,7 @@ QString IniTemplate::generate(const SettingsModel& settings, const InspectionRes
             "requirements_file = %5\n"
             "virtual_env_dir = \n"
             "GUI = true\n"
-            "GUI_HIDE_AFTER_SUCCESS = %6\n"
+            "GUI_CLI_HIDE_AFTER_SUCCESS = %6\n"
             "log_console = true\n"
             "log_level = info\n\n")
             .arg(os)
