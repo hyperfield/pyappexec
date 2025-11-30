@@ -100,10 +100,8 @@ InstallerWindow::InstallerWindow(QWidget* parent) : QMainWindow(parent)
     hideGuiCheck_ = new QCheckBox(tr("Hide GUI/CLI after successful runs"), central);
     layout->addWidget(hideGuiCheck_);
 
-#if defined(Q_OS_WIN)
     copyCliOnlyCheck_ = new QCheckBox(tr("Copy only the CLI version (reduces the size)"), central);
     layout->addWidget(copyCliOnlyCheck_);
-#endif
 
     installButton_ = new QPushButton(tr("Install PyAppExec"), central);
     installButton_->setFixedWidth(220);
@@ -237,11 +235,9 @@ SettingsModel InstallerWindow::gatherSettings() const
         settings.iconPath = iconPathEdit_->text().trimmed();
     }
     settings.hideGuiAfterSuccess = hideGuiCheck_->isChecked();
-#if defined(Q_OS_WIN)
     if (copyCliOnlyCheck_) {
         settings.copyCliOnly = copyCliOnlyCheck_->isChecked();
     }
-#endif
     return settings;
 }
 
@@ -304,11 +300,9 @@ void InstallerWindow::handleInstall()
 
     logMessage(tr("Generated %1").arg(createdIni));
     logMessage(tr("Copied launcher as %1").arg(settings.launcherArtifactName()));
-#if defined(Q_OS_WIN)
     if (settings.copyCliOnly) {
-        logMessage(tr("CLI-only mode: skipped copying Qt and other adjacent DLLs."));
+        logMessage(tr("CLI-only mode: using the command-line launcher instead of the GUI binary."));
     }
-#endif
 
     QDesktopServices::openUrl(QUrl::fromLocalFile(createdIni));
     QMessageBox::information(this, tr("Success"), tr("PyAppExec was installed for %1").arg(settings.appName));
@@ -433,16 +427,15 @@ void InstallerWindow::showAboutQtDialog()
 void InstallerWindow::updateActionButtons()
 {
     const bool hasProject = !projectPathEdit_->text().trimmed().isEmpty();
+    const QString iniPath = hasProject
+        ? QDir(projectPathEdit_->text()).filePath(QStringLiteral("pyappexec.ini"))
+        : QString();
+    const bool hasIni = hasProject && QFileInfo::exists(iniPath);
+
     if (installButton_) {
         installButton_->setEnabled(hasProject);
     }
 
-#if defined(Q_OS_WIN)
-    bool hasIni = false;
-    if (hasProject) {
-        const QString iniPath = QDir(projectPathEdit_->text()).filePath(QStringLiteral("pyappexec.ini"));
-        hasIni = QFileInfo::exists(iniPath);
-    }
     if (uninstallButton_) {
         uninstallButton_->setEnabled(hasProject && hasIni);
         if (!hasIni) {
@@ -451,7 +444,6 @@ void InstallerWindow::updateActionButtons()
             uninstallButton_->setToolTip(QString());
         }
     }
-#endif
 }
 
 } // namespace installer

@@ -38,8 +38,14 @@ std::filesystem::path ConfigLoader::resolveConfigPath(const std::optional<std::s
         return primary;
     }
 
+    fs::path adjacent = binaryDir_ / "pyappexec.ini";
+    if (fs::exists(adjacent, ec)) {
+        spdlog::info("Found pyappexec.ini next to the launcher at {}", adjacent.string());
+        return adjacent;
+    }
+
     throw std::runtime_error(
-        "Unable to locate pyappexec.ini in the current directory.\n"
+        "Unable to locate pyappexec.ini in the current directory or next to the launcher.\n"
         "Pass --config /path/to/pyappexec.ini to specify the configuration explicitly.");
 }
 
