@@ -14,9 +14,7 @@ set(INSTALLER_SOURCES
 # Ensure the Windows icon resource is embedded, mirroring the launcher binary.
 if(WIN32)
     set(_installer_icon_rc "${CMAKE_BINARY_DIR}/appicon.rc")
-    if(NOT EXISTS "${_installer_icon_rc}")
-        configure_file(${CMAKE_SOURCE_DIR}/resources/win/appicon.rc.in "${_installer_icon_rc}" @ONLY)
-    endif()
+    configure_file(${CMAKE_SOURCE_DIR}/resources/win/appicon.rc.in "${_installer_icon_rc}" @ONLY)
     list(APPEND INSTALLER_SOURCES "${_installer_icon_rc}")
 endif()
 
@@ -24,10 +22,6 @@ add_executable(pyappexec_installer ${INSTALLER_SOURCES})
 set_common_runtime_output(pyappexec_installer)
 
 # Hide the console window on Windows builds.
-if(WIN32)
-    set_target_properties(pyappexec_installer PROPERTIES WIN32_EXECUTABLE TRUE)
-endif()
-
 target_include_directories(pyappexec_installer
     PRIVATE
         ${CMAKE_SOURCE_DIR}/include

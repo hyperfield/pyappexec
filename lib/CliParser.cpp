@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <stdexcept>
+#include "AppMetadata.hpp"
 
 CliParser::CliParser(int argc, char** argv) : argc_(argc), argv_(argv) {}
 
@@ -19,6 +20,10 @@ CliOptions CliParser::parse() const
         }
         if (arg == "--help" || arg == "-h") {
             exitWithHelp();
+        }
+        if (arg == "--version" || arg == "-v") {
+            options.showVersion = true;
+            continue;
         }
         if (arg == "--reset-gui") {
             options.resetGuiPreference = true;
@@ -55,6 +60,7 @@ void CliParser::printHelp() const
               << "  --config <path>     Use a specific pyappexec.ini\n"
               << "  --no-gui            Force CLI mode even if GUI is enabled in the INI\n"
               << "  --reset-gui         Clear the saved \"hide GUI\" preference for this app\n"
+              << "  --version, -v       Show version and exit\n"
               << "  --help              Show this message and exit\n\n"
               << "PyAppExec prepares Python interpreters, virtual environments, and external tools\n"
                  "so end users can run your packaged application without manual setup.\n"

@@ -10,6 +10,7 @@ struct CliOptions
 {
     bool forceCli{false};
     bool resetGuiPreference{false};
+    bool showVersion{false};
     std::optional<std::string> configOverride;
     std::vector<std::string> forwardedArgs;
 };
