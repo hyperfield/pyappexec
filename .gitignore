@@ -41,7 +41,7 @@ package_installer_app.sh
 update_app_version.py
 
 # External documentation
-readthedocs/
+# readthedocs/
 
 # Program build, test and activity artifacts
 .codacy
