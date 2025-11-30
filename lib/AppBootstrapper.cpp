@@ -65,7 +65,88 @@ const char kPathSeparator =
     ':';
 #endif
 
-bool ensureVersionBinaryAtRoot(Requirement& req, const fs::path& destDir);
+bool flattenSingleTopLevelDirectory(const fs::path& destDir)
+{
+    std::error_code ec;
+    fs::directory_iterator it(destDir, ec), end;
+    if (ec) {
+        return false;
+    }
+
+    fs::path singleDir;
+    std::size_t fileCount = 0;
+    std::size_t dirCount = 0;
+
+    for (; it != end && !ec; ++it) {
+        if (it->is_directory(ec)) {
+            ++dirCount;
+            singleDir = it->path();
+        } else if (it->is_regular_file(ec)) {
+            ++fileCount;
+        }
+    }
+
+    if (ec || fileCount > 0 || dirCount != 1) {
+        return false;
+    }
+
+    fs::path subdir = singleDir;
+    fs::directory_iterator sit(subdir, ec);
+    if (ec) {
+        return false;
+    }
+    for (; sit != end && !ec; ++sit) {
+        fs::path target = destDir / sit->path().filename();
+        std::error_code moveEc;
+        fs::rename(sit->path(), target, moveEc);
+        if (moveEc) {
+            spdlog::warn("Failed to move {} to {}: {}", sit->path().string(), target.string(), moveEc.message());
+        }
+    }
+    std::error_code rmEc;
+    fs::remove(subdir, rmEc);
+    return true;
+}
+
+#ifdef _WIN32
+void updateUserPathWindows(const fs::path& dir)
+{
+    if (dir.empty()) {
+        return;
+    }
+    std::wstring target = dir.wstring();
+    std::wstring existing;
+    DWORD size = GetEnvironmentVariableW(L"PATH", nullptr, 0);
+    if (size > 0) {
+        std::wstring buffer(size, L'\0');
+        GetEnvironmentVariableW(L"PATH", buffer.data(), size);
+        existing.assign(buffer.c_str());
+    }
+    if (existing.find(target) != std::wstring::npos) {
+        return;
+    }
+    std::wstring updated = target;
+    updated.append(L";").append(existing);
+    SetEnvironmentVariableW(L"PATH", updated.c_str());
+    // Persist for user
+    HKEY hKey;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Environment", 0, KEY_READ | KEY_WRITE, &hKey) == ERROR_SUCCESS) {
+        RegSetValueExW(hKey, L"Path", 0, REG_EXPAND_SZ,
+                       reinterpret_cast<const BYTE*>(updated.c_str()),
+                       static_cast<DWORD>((updated.size() + 1) * sizeof(wchar_t)));
+        RegCloseKey(hKey);
+    }
+
+    SendMessageTimeoutW(HWND_BROADCAST,
+                        WM_SETTINGCHANGE,
+                        0,
+                        reinterpret_cast<LPARAM>(L"Environment"),
+                        SMTO_ABORTIFHUNG,
+                        5000,
+                        nullptr);
+    spdlog::info("Added {} to PATH", fs::path(target).string());
+}
+#endif
 
 bool isProtectedInstallPath(const std::filesystem::path& path)
 {
@@ -657,6 +738,14 @@ bool AppBootstrapper::installRequirements()
         }
 
         if (isRequirementAlreadyInstalled(req)) {
+            if (req.append_to_path) {
+                maybeAddRequirementPathFromVersionCheck(req);
+#ifdef _WIN32
+                if (!requirement_bin_paths_.empty()) {
+                    updateUserPathWindows(requirement_bin_paths_.back());
+                }
+#endif
+            }
             continue;
         }
 
@@ -676,6 +765,14 @@ bool AppBootstrapper::installRequirements()
             if (!verifyRequirementInstalled(req)) {
                 success = false;
                 break;
+            }
+            if (req.append_to_path) {
+                maybeAddRequirementPathFromVersionCheck(req);
+#ifdef _WIN32
+                if (!requirement_bin_paths_.empty()) {
+                    updateUserPathWindows(requirement_bin_paths_.back());
+                }
+#endif
             }
             continue;
         }
@@ -741,7 +838,7 @@ bool AppBootstrapper::installRequirements()
                     addRequirementPath(destDir);
                 }
 #ifdef _WIN32
-                ensureVersionBinaryAtRoot(req, destDir);
+                flattenSingleTopLevelDirectory(destDir);
 #endif
                 if (!verifyRequirementInstalled(req)) {
                     return false;
@@ -777,11 +874,7 @@ bool AppBootstrapper::installRequirements()
                     << "$dl='" << installerStr << "';"
                     << "$dest='" << destStr << "';"
                     << "if(Test-Path $dest){Remove-Item $dest -Recurse -Force};"
-                    << "Expand-Archive -LiteralPath $dl -DestinationPath $dest -Force;"
-                    << "$ff=Get-ChildItem -Path $dest -Filter 'ffmpeg.exe' -Recurse -File | Select-Object -First 1;"
-                    << "if($ff){Copy-Item $ff.FullName -Destination (Join-Path $dest 'ffmpeg.exe') -Force};"
-                    << "$fp=Get-ChildItem -Path $dest -Filter 'ffprobe.exe' -Recurse -File | Select-Object -First 1;"
-                    << "if($fp){Copy-Item $fp.FullName -Destination (Join-Path $dest 'ffprobe.exe') -Force};";
+                    << "Expand-Archive -LiteralPath $dl -DestinationPath $dest -Force;";
 #ifdef _WIN32
                 std::vector<std::string> psArgs{
                     "-ExecutionPolicy", "Bypass",
@@ -826,13 +919,21 @@ bool AppBootstrapper::installRequirements()
                 handled = runCommand(cmd.str());
 #endif
                 if (handled) {
-                    ensureVersionBinaryAtRoot(req, destDir);
-                    if (!verifyRequirementInstalled(req)) {
-                        success = false;
-                        break;
-                    }
-                    continue;
+                flattenSingleTopLevelDirectory(destDir);
+                if (!verifyRequirementInstalled(req)) {
+                    success = false;
+                    break;
                 }
+                if (req.append_to_path) {
+                    maybeAddRequirementPathFromVersionCheck(req);
+#ifdef _WIN32
+                    if (!requirement_bin_paths_.empty()) {
+                        updateUserPathWindows(requirement_bin_paths_.back());
+                    }
+#endif
+                }
+                continue;
+            }
                 success = false;
                 break;
             }
@@ -1428,11 +1529,6 @@ bool ensureVersionBinaryAtRoot(Requirement& req, const fs::path& destDir)
     fs::path targetPath = destDir / targetName;
     std::error_code ec;
     if (fs::exists(targetPath, ec) && !ec) {
-        std::string newCmd = "\"" + targetPath.string() + "\"";
-        if (!rest.empty()) {
-            newCmd += " " + rest;
-        }
-        req.version_check_command = newCmd;
         return true;
     }
 
@@ -1446,6 +1542,7 @@ bool ensureVersionBinaryAtRoot(Requirement& req, const fs::path& destDir)
             break;
         }
     }
+
     if (!ec && found.empty()) {
         return false;
     }
@@ -1454,21 +1551,12 @@ bool ensureVersionBinaryAtRoot(Requirement& req, const fs::path& destDir)
         return false;
     }
 
-    std::error_code copyEc;
-    fs::create_directories(destDir, copyEc);
-    copyEc.clear();
-    fs::copy_file(found, targetPath, fs::copy_options::overwrite_existing, copyEc);
-    if (copyEc) {
-        spdlog::warn("Could not place {} at {}: {}", targetName, targetPath.string(), copyEc.message());
-        return false;
-    }
-
-    std::string newCmd = "\"" + targetPath.string() + "\"";
+    std::string newCmd = "\"" + found.string() + "\"";
     if (!rest.empty()) {
         newCmd += " " + rest;
     }
     req.version_check_command = newCmd;
-    spdlog::info("Pinned {} to {}", req.name, targetPath.string());
+    spdlog::info("Updated version_check_command for {} to {}", req.name, newCmd);
     return true;
 }
 
